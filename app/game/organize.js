@@ -1,0 +1,480 @@
+import React, { useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TextInput, 
+  Pressable, 
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  Modal
+} from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { 
+  MapPin, 
+  Users, 
+  DollarSign,
+  Award,
+  Check,
+  X,
+  ChevronDown
+} from 'lucide-react-native';
+import { colors } from '../../constants/colors';
+import CalendarPicker from '../../components/CalendarPicker';
+import TimeRangePicker from '../../components/TimeRangePicker';
+import LocationInput from '../../components/LocationInput';
+
+const SPORTS = [
+  'Basketball', 
+  'Tennis', 
+  'Football', 
+  'Volleyball', 
+  'Badminton', 
+  'Running', 
+  'Cycling'
+];
+
+const SKILL_LEVELS = [
+  'Beginner Friendly',
+  'Intermediate',
+  'Advanced'
+];
+
+export default function OrganizeGameScreen() {
+  const router = useRouter();
+  
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [location, setLocation] = useState('');
+  const [city, setCity] = useState('');
+  const [date, setDate] = useState(new Date());
+  const [startTime, setStartTime] = useState(null);
+  const [endTime, setEndTime] = useState(null);
+  const [playersNeeded, setPlayersNeeded] = useState('4');
+  const [price, setPrice] = useState('0');
+  const [selectedSport, setSelectedSport] = useState(null);
+  const [selectedLevel, setSelectedLevel] = useState(null);
+  const [showSportDropdown, setShowSportDropdown] = useState(false);
+  
+  const handleCreateGame = () => {
+    // Validate form
+    if (!title || !location || !selectedSport || !selectedLevel || !startTime || !endTime) {
+      Alert.alert('Missing Information', 'Please fill in all required fields.');
+      return;
+    }
+    
+    // In a real app, we would send this data to an API
+    const gameData = {
+      title,
+      description,
+      location,
+      city,
+      date: date.toISOString(),
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      playersNeeded: parseInt(playersNeeded),
+      price: parseInt(price),
+      sport: selectedSport,
+      level: selectedLevel
+    };
+    
+    console.log('Game created:', gameData);
+    Alert.alert(
+      'Success',
+      'Your game has been created!',
+      [
+        {
+          text: 'OK',
+          onPress: () => router.replace('/(tabs)/games')
+        }
+      ]
+    );
+  };
+
+  const handleTimeRangeSelect = (start, end) => {
+    setStartTime(start);
+    setEndTime(end);
+  };
+
+  const formatTime = (date) => {
+    if (!date) return '';
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <Stack.Screen 
+        options={{
+          title: 'Organize a Game',
+          headerStyle: {
+            backgroundColor: colors.card,
+          },
+          headerTintColor: colors.primary,
+          headerShadowVisible: false,
+          headerLeft: () => (
+            <Pressable onPress={() => router.back()} style={styles.headerButton}>
+              <X size={24} color={colors.primary} />
+            </Pressable>
+          ),
+          headerRight: () => (
+            <Pressable onPress={handleCreateGame} style={styles.headerButton}>
+              <Check size={24} color={colors.primary} />
+            </Pressable>
+          ),
+        }}
+      />
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Sport *</Text>
+          <Pressable 
+            style={styles.sportDropdown}
+            onPress={() => setShowSportDropdown(true)}
+          >
+            <Text style={selectedSport ? styles.dropdownText : styles.dropdownPlaceholder}>
+              {selectedSport || 'Select a sport'}
+            </Text>
+            <ChevronDown size={20} color={colors.textLight} />
+          </Pressable>
+          
+          <Modal
+            visible={showSportDropdown}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setShowSportDropdown(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Select Sport</Text>
+                  <Pressable onPress={() => setShowSportDropdown(false)}>
+                    <X size={24} color={colors.text} />
+                  </Pressable>
+                </View>
+                
+                <ScrollView>
+                  {SPORTS.map((sport) => (
+                    <Pressable
+                      key={sport}
+                      style={styles.sportOption}
+                      onPress={() => {
+                        setSelectedSport(sport);
+                        setShowSportDropdown(false);
+                      }}
+                    >
+                      <Text style={styles.sportOptionText}>{sport}</Text>
+                      {selectedSport === sport && (
+                        <Check size={20} color={colors.primary} />
+                      )}
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Game Details</Text>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Title *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Give your game a name"
+              value={title}
+              onChangeText={setTitle}
+            />
+          </View>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Description</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Describe your game, rules, what to bring, etc."
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Skill Level *</Text>
+          <View style={styles.levelOptions}>
+            {SKILL_LEVELS.map((level) => (
+              <Pressable
+                key={level}
+                style={[
+                  styles.levelOption,
+                  selectedLevel === level && styles.levelOptionSelected
+                ]}
+                onPress={() => setSelectedLevel(level)}
+              >
+                <Award size={16} color={selectedLevel === level ? colors.card : colors.primary} />
+                <Text style={[
+                  styles.levelOptionText,
+                  selectedLevel === level && styles.levelOptionTextSelected
+                ]}>
+                  {level}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Location & Time</Text>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Venue Name *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Where will the game be held?"
+              value={location}
+              onChangeText={setLocation}
+            />
+          </View>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>City *</Text>
+            <LocationInput
+              selectedLocation={city}
+              onSelectLocation={setCity}
+            />
+          </View>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Date *</Text>
+            <CalendarPicker
+              selectedDate={date}
+              onSelectDate={setDate}
+            />
+          </View>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Time *</Text>
+            <TimeRangePicker
+              startTime={startTime}
+              endTime={endTime}
+              onSelectTimeRange={handleTimeRangeSelect}
+            />
+            {startTime && endTime && (
+              <Text style={styles.selectedTimeText}>
+                Selected: {formatTime(startTime)} - {formatTime(endTime)}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Players & Cost</Text>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Number of Players Needed</Text>
+            <View style={styles.inputWithIcon}>
+              <Users size={20} color={colors.primary} />
+              <TextInput
+                style={styles.iconInput}
+                placeholder="Total players needed"
+                value={playersNeeded}
+                onChangeText={setPlayersNeeded}
+                keyboardType="number-pad"
+              />
+            </View>
+          </View>
+          
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Cost per Person ($)</Text>
+            <View style={styles.inputWithIcon}>
+              <DollarSign size={20} color={colors.primary} />
+              <TextInput
+                style={styles.iconInput}
+                placeholder="0 for free games"
+                value={price}
+                onChangeText={setPrice}
+                keyboardType="number-pad"
+              />
+            </View>
+          </View>
+        </View>
+
+        <Pressable 
+          style={styles.createButton}
+          onPress={handleCreateGame}
+        >
+          <Text style={styles.createButtonText}>Create Game</Text>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  headerButton: {
+    padding: 8,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 16,
+  },
+  sportDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  dropdownPlaceholder: {
+    fontSize: 16,
+    color: colors.textLight,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    width: '80%',
+    maxHeight: '70%',
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  sportOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sportOptionText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+  },
+  textArea: {
+    height: 120,
+    textAlignVertical: 'top',
+  },
+  levelOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  levelOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  levelOptionSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  levelOptionText: {
+    color: colors.text,
+    fontSize: 14,
+  },
+  levelOptionTextSelected: {
+    color: colors.card,
+    fontWeight: '500',
+  },
+  inputWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+  },
+  iconInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+  },
+  createButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  createButtonText: {
+    color: colors.card,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  selectedTimeText: {
+    marginTop: 8,
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+});
