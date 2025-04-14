@@ -6,7 +6,7 @@ import { colors } from '../../constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import GameCard from '../../components/GameCard';
 import SearchBar from '../../components/SearchBar';
-import FilterBar from '../../components/Filterbar';
+import FilterBar from '../../components/FilterBar';
 
 const SPORTS = ['All', 'Basketball', 'Tennis', 'Football', 'Volleyball', 'Badminton'];
 

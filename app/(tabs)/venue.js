@@ -5,7 +5,7 @@ import { Search } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import VenueCard from '../../components/VenueCard';
 import SearchBar from '../../components/SearchBar';
-import FilterBar from '../../components/Filterbar';
+import FilterBar from '../../components/FilterBar';
 
 const SPORTS = ['All', 'Tennis', 'Basketball', 'Football', 'Badminton', 'Swimming'];
 

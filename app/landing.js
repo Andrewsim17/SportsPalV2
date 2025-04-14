@@ -24,6 +24,7 @@ import {
 } from 'lucide-react-native';
 import { colors } from '../constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SupabaseTest } from '../components/SupabaseTest';
 
 const FEATURES = [
   {
@@ -98,6 +99,7 @@ export default function LandingScreen() {
 
   return (
     <View style={styles.container}>
+      <SupabaseTest />
       <Stack.Screen 
         options={{
           headerShown: false
