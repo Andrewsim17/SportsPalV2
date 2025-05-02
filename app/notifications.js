@@ -1,73 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Heart, MessageCircle, UserPlus, Calendar, Award } from 'lucide-react-native';
 import { colors } from '../constants/colors';
-
-const MOCK_NOTIFICATIONS = [
-  {
-    id: '1',
-    type: 'like',
-    user: {
-      id: 'user2',
-      name: 'Mike Chen',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200',
-    },
-    content: 'liked your activity',
-    activity: 'Morning Run',
-    time: '2 hours ago',
-    read: false,
-  },
-  {
-    id: '2',
-    type: 'comment',
-    user: {
-      id: 'user3',
-      name: 'David Lee',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200',
-    },
-    content: 'commented on your activity',
-    activity: 'Weekend Ride',
-    comment: 'Great pace! Which route did you take?',
-    time: '5 hours ago',
-    read: false,
-  },
-  {
-    id: '3',
-    type: 'follow',
-    user: {
-      id: 'user4',
-      name: 'Emma Wilson',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-    },
-    content: 'started following you',
-    time: '1 day ago',
-    read: false,
-  },
-  {
-    id: '4',
-    type: 'game',
-    user: {
-      id: 'user5',
-      name: 'Sarah Johnson',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-    },
-    content: 'invited you to a game',
-    game: 'Tennis Doubles',
-    time: '2 days ago',
-    read: true,
-  },
-  {
-    id: '5',
-    type: 'achievement',
-    content: 'You earned a new achievement',
-    achievement: 'Early Bird',
-    description: 'Complete 5 activities before 8 AM',
-    time: '3 days ago',
-    read: true,
-  },
-];
+import { notificationsApi } from '../lib/api';
+import { useAuthStore } from '../store/auth-store';
+import { formatTimeAgo } from '../utils/date';
 
 function NotificationItem({ notification, onPress }) {
   const getIcon = () => {
@@ -87,20 +26,36 @@ function NotificationItem({ notification, onPress }) {
     }
   };
 
+  const displayData = {
+    id: notification.id,
+    type: notification.type,
+    user: notification.sender ? {
+      id: notification.sender.id,
+      name: notification.sender.name || 'Unknown User',
+      avatar: notification.sender.avatar_url || 'https://ui-avatars.com/api/?name=U&background=cccccc&color=fff',
+    } : null,
+    content: notification.content,
+    time: formatTimeAgo(notification.created_at),
+    read: notification.is_read,
+    link: notification.link,
+    activity: notification.type === 'like' || notification.type === 'comment' ? 'your activity' : null,
+    comment: notification.type === 'comment' ? '"..."' : null,
+  };
+
   return (
     <Pressable 
       style={[
         styles.notificationItem,
-        !notification.read && styles.unreadNotification
+        !displayData.read && styles.unreadNotification
       ]}
-      onPress={() => onPress(notification)}
+      onPress={() => onPress(displayData)}
     >
       <View style={styles.iconContainer}>
         {getIcon()}
       </View>
       
-      {notification.user ? (
-        <Image source={notification.user.avatar} style={styles.avatar} />
+      {displayData.user ? (
+        <Image source={displayData.user.avatar} style={styles.avatar} />
       ) : (
         <View style={styles.achievementIcon}>
           <Award size={24} color={colors.card} />
@@ -109,70 +64,86 @@ function NotificationItem({ notification, onPress }) {
       
       <View style={styles.notificationContent}>
         <Text style={styles.notificationText}>
-          {notification.user && (
-            <Text style={styles.userName}>{notification.user.name} </Text>
+          {displayData.user && (
+            <Text style={styles.userName}>{displayData.user.name} </Text>
           )}
-          {notification.content}
-          {notification.activity && (
-            <Text style={styles.highlightedText}> {notification.activity}</Text>
+          {displayData.content}
+          {displayData.activity && (
+            <Text style={styles.highlightedText}> {displayData.activity}</Text>
           )}
-          {notification.game && (
-            <Text style={styles.highlightedText}> {notification.game}</Text>
-          )}
-          {notification.achievement && (
-            <Text style={styles.highlightedText}> {notification.achievement}</Text>
+          {displayData.comment && (
+            <Text style={styles.commentText} numberOfLines={1}>"{displayData.comment}"</Text>
           )}
         </Text>
         
-        {notification.comment && (
-          <Text style={styles.commentText} numberOfLines={1}>"{notification.comment}"</Text>
-        )}
-        
-        {notification.description && (
-          <Text style={styles.descriptionText}>{notification.description}</Text>
-        )}
-        
-        <Text style={styles.timeText}>{notification.time}</Text>
+        <Text style={styles.timeText}>{displayData.time}</Text>
       </View>
       
-      {!notification.read && <View style={styles.unreadDot} />}
+      {!displayData.read && <View style={styles.unreadDot} />}
     </Pressable>
   );
 }
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [notifications, setNotifications] = React.useState(MOCK_NOTIFICATIONS);
+  const { user } = useAuthStore();
+  const [notifications, setNotifications] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleNotificationPress = (notification) => {
-    // Mark as read
-    setNotifications(notifications.map(item => 
-      item.id === notification.id ? { ...item, read: true } : item
-    ));
-
-    // Navigate based on notification type
-    switch (notification.type) {
-      case 'like':
-      case 'comment':
-        router.push(`/activity/${notification.id}`);
-        break;
-      case 'follow':
-        router.push(`/profile/${notification.user.id}`);
-        break;
-      case 'game':
-        router.push(`/game/${notification.id}`);
-        break;
-      case 'achievement':
-        router.push('/achievements');
-        break;
+  const fetchNotifications = useCallback(async () => {
+    if (!user?.id) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedNotifications = await notificationsApi.getNotifications(user.id);
+      setNotifications(fetchedNotifications);
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
+      setError(err.message || 'Failed to load notifications');
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [user?.id]);
 
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(item => ({ ...item, read: true })));
-  };
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const handleNotificationPress = useCallback(async (notification) => {
+    setNotifications(prev => 
+      prev.map(item => 
+        item.id === notification.id ? { ...item, is_read: true } : item
+      )
+    );
+    
+    notificationsApi.markNotificationAsRead(notification.id).then(success => {
+      if (!success) {
+        console.warn(`Failed to mark notification ${notification.id} as read via API.`);
+      }
+    });
+
+    if (notification.link) {
+      console.log('Navigating to link:', notification.link)
+      router.push(notification.link);
+    } else {
+      console.log('No link provided for notification:', notification.id);
+    }
+  }, [router]);
+
+  const markAllAsRead = useCallback(async () => {
+    if (!user?.id) return;
+    setNotifications(prev => 
+      prev.map(item => ({ ...item, is_read: true }))
+    );
+    const success = await notificationsApi.markAllNotificationsAsRead(user.id);
+    if (!success) {
+       console.warn('Failed to mark all notifications as read via API.');
+       fetchNotifications(); 
+    }
+  }, [user?.id, fetchNotifications]);
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
     <View style={styles.container}>
@@ -194,6 +165,16 @@ export default function NotificationsScreen() {
         }}
       />
 
+      {isLoading && notifications.length === 0 ? (
+        <ActivityIndicator size="large" color={colors.primary} style={styles.centered} />
+      ) : error ? (
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <Pressable onPress={fetchNotifications}>
+            <Text style={styles.resetText}>Try Again</Text>
+          </Pressable>
+        </View>
+      ) : (
       <FlatList
         data={notifications}
         renderItem={({ item }) => (
@@ -205,11 +186,14 @@ export default function NotificationsScreen() {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
+            !isLoading && (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No notifications yet</Text>
           </View>
+            )
         }
       />
+      )}
     </View>
   );
 }
@@ -239,7 +223,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   unreadNotification: {
-    backgroundColor: `${colors.primary}10`, // Light tint of primary color
+    backgroundColor: `${colors.primary}10`,
   },
   iconContainer: {
     position: 'absolute',
@@ -282,11 +266,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 4,
   },
-  descriptionText: {
-    fontSize: 14,
-    color: colors.textLight,
-    marginTop: 4,
-  },
   timeText: {
     fontSize: 12,
     color: colors.textLight,
@@ -310,4 +289,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textLight,
   },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  errorText: { fontSize: 16, color: colors.danger, textAlign: 'center', marginBottom: 16 },
+  resetText: { fontSize: 16, color: colors.primary, fontWeight: '600' },
 });

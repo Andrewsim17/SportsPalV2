@@ -29,20 +29,15 @@ export default function LoginScreen() {
       return;
     }
     
-    const success = await login(email, password);
+    const success = await login({ email, password });
     if (success) {
       router.replace('/(tabs)');
     }
   };
 
   const handleSocialLogin = (provider) => {
-    // In a real app, this would integrate with the respective social auth provider
-    console.log(`Login with ${provider}`);
-    
-    // Simulate successful login
-    setTimeout(() => {
-      router.replace('/(tabs)');
-    }, 1000);
+    // Display message that social login is not implemented yet
+    alert(`${provider} login coming soon!`);
   };
 
   return (
@@ -168,7 +163,7 @@ export default function LoginScreen() {
         </View>
 
         <Text style={styles.demoText}>
-          Demo credentials: demo@example.com / password123
+          Email auth is connected to Supabase. Create an account to get started.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

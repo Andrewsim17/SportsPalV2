@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
   ScrollView, 
   Pressable, 
-  Dimensions 
+  Dimensions,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -15,173 +17,205 @@ import {
   Award, 
   MessageCircle, 
   UserPlus, 
+  UserCheck,
   Clock, 
   ChevronRight,
   Star,
   Activity,
-  Share2
+  Share2,
+  AlertCircle
 } from 'lucide-react-native';
-import { colors } from '../../constants/colors';
-import { LinearGradient } from 'expo-linear-gradient';
-
-const MOCK_PLAYERS = {
-  'player1': {
-    id: 'player1',
-    name: 'Jason Tan',
-    username: 'jasontan',
-    sports: ['Basketball', 'Volleyball'],
-    level: 'Advanced',
-    image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200',
-    location: 'Kuala Lumpur',
-    availability: 'Weekends',
-    bio: 'Basketball player for 10 years, looking for competitive games and new teammates.',
-    stats: {
-      gamesPlayed: 87,
-      wins: 52,
-      achievements: 3
-    },
-    recentActivities: [
-      {
-        id: 'act1',
-        type: 'Basketball',
-        date: '2 days ago',
-        location: 'KLCC Courts',
-        duration: '1h 45m',
-        distance: null,
-        score: 'Won 72-65'
-      },
-      {
-        id: 'act2',
-        type: 'Running',
-        date: '5 days ago',
-        location: 'Bukit Jalil Park',
-        duration: '32m',
-        distance: '5.2 km',
-        score: null
-      }
-    ],
-    upcomingGames: [
-      {
-        id: 'game1',
-        type: 'Basketball',
-        date: 'Tomorrow, 7:00 PM',
-        location: 'Sentral Courts',
-        participants: 8
-      }
-    ]
-  },
-  'player2': {
-    id: 'player2',
-    name: 'Emily Wong',
-    username: 'emilyw',
-    sports: ['Tennis', 'Badminton'],
-    level: 'Intermediate',
-    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-    location: 'Petaling Jaya',
-    availability: 'Evenings',
-    bio: 'Tennis enthusiast looking for regular practice partners. Also enjoy badminton on weekends.',
-    stats: {
-      gamesPlayed: 42,
-      wins: 23,
-      achievements: 1
-    },
-    recentActivities: [
-      {
-        id: 'act1',
-        type: 'Tennis',
-        date: '1 day ago',
-        location: 'PJ Tennis Club',
-        duration: '1h 20m',
-        distance: null,
-        score: 'Lost 4-6, 3-6'
-      }
-    ],
-    upcomingGames: [
-      {
-        id: 'game1',
-        type: 'Badminton',
-        date: 'Saturday, 10:00 AM',
-        location: 'Sports Arena',
-        participants: 4
-      }
-    ]
-  },
-  'player3': {
-    id: 'player3',
-    name: 'David Lim',
-    username: 'davidlim',
-    sports: ['Football', 'Running'],
-    level: 'Beginner',
-    image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=200',
-    location: 'Shah Alam',
-    availability: 'Weekdays',
-    bio: 'New to sports and looking to improve my fitness. Enjoy casual football games and morning runs.',
-    stats: {
-      gamesPlayed: 12,
-      wins: 5,
-      achievements: 0
-    },
-    recentActivities: [
-      {
-        id: 'act1',
-        type: 'Running',
-        date: '3 days ago',
-        location: 'Shah Alam Lake Gardens',
-        duration: '45m',
-        distance: '4.8 km',
-        score: null
-      }
-    ],
-    upcomingGames: []
-  }
-};
+import { colors } from '@/constants/colors';
+import { profilesApi, activitiesApi, gamesApi, socialApi, chatApi } from '@/lib/api';
+import { useAuthStore } from '@/store/auth-store';
+import { formatTimeAgo, formatDateTime } from '../../utils/date';
 
 export default function PlayerDetailsScreen() {
-  const { id } = useLocalSearchParams();
+  const { id: profileId } = useLocalSearchParams();
   const router = useRouter();
-  const player = MOCK_PLAYERS[id];
+  const { user, refreshProfile } = useAuthStore();
+
+  const [profile, setProfile] = useState(null);
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [upcomingGames, setUpcomingGames] = useState([]);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  if (!player) {
-    return (
-      <View style={styles.container}>
-        <Stack.Screen 
-          options={{
-            title: 'Player Not Found',
-            headerStyle: {
-              backgroundColor: colors.card,
-            },
-            headerTintColor: colors.primary,
-          }}
-        />
-        <View style={styles.notFound}>
-          <Text style={styles.notFoundText}>Player not found</Text>
-        </View>
-      </View>
-    );
-  }
+  const fetchData = useCallback(async () => {
+    if (!profileId) {
+      setError("Profile ID not provided.");
+      setIsLoading(false);
+      return;
+    }
+    console.log('Fetching data for profile:', profileId);
+    setIsLoading(true);
+    setError(null);
 
-  const handleFollow = () => {
-    setIsFollowing(!isFollowing);
+    try {
+      const [fetchedProfile, fetchedActivities, fetchedGames, followingList] = await Promise.all([
+        profilesApi.getProfile(profileId),
+        activitiesApi.getUserActivities(profileId, 5),
+        gamesApi.getUserGames(profileId),
+        user ? socialApi.getFollowing(user.id) : Promise.resolve([])
+      ]);
+
+      console.log('Fetched Profile:', fetchedProfile);
+      console.log('Fetched Activities:', fetchedActivities);
+      console.log('Fetched Games:', fetchedGames);
+      console.log('Following List (IDs):', followingList);
+
+      if (!fetchedProfile) {
+        throw new Error('Profile not found');
+      }
+
+      setProfile(fetchedProfile);
+
+      const adaptedActivities = fetchedActivities.map(act => ({
+        id: act.id,
+        type: act.sport || act.type,
+        date: formatTimeAgo(act.created_at),
+        location: act.details?.location_name || act.game?.location || 'Location N/A',
+        duration: act.details?.duration_min ? `${act.details.duration_min} min` : null,
+        distance: act.details?.distance_km ? `${act.details.distance_km.toFixed(1)} km` : null,
+        score: act.details?.score || act.game?.score || null,
+        content: act.content
+      }));
+      setRecentActivities(adaptedActivities);
+
+      const adaptedGames = fetchedGames
+        .filter(game => new Date(game.date) > new Date())
+        .map(game => ({
+           id: game.id,
+           type: game.sport,
+           date: game.date,
+           location: game.venue?.name || game.location || 'Location N/A',
+           participants: game.participants,
+           maxParticipants: game.max_participants || null,
+           title: game.name || `${game.sport} Game`
+        }));
+      setUpcomingGames(adaptedGames);
+
+      if (user && followingList?.includes(profileId)) {
+         setIsFollowing(true);
+      } else {
+         setIsFollowing(false);
+      }
+
+    } catch (err) {
+      console.error('Failed to fetch player data:', err);
+      if (err.code === 'PGRST201' || err.message.includes('PGRST201')) {
+         setError('Could not load profile details due to a data relationship issue. Please report this.');
+      } else {
+         setError(err.message || 'Failed to load profile details.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [profileId, user]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleFollowToggle = async () => {
+     if (!user || isFollowLoading || !profile) return;
+
+     setIsFollowLoading(true);
+     const currentlyFollowing = isFollowing;
+
+     setIsFollowing(!currentlyFollowing);
+
+     try {
+        if (currentlyFollowing) {
+           await socialApi.unfollowUser(user.id, profile.id);
+           console.log('Unfollowed user');
+        } else {
+           await socialApi.followUser(user.id, profile.id);
+           console.log('Followed user');
+        }
+        
+        // Refresh the profile data to update follower/following counts
+        await refreshProfile();
+        
+     } catch (err) {
+        console.error(`Failed to ${currentlyFollowing ? 'unfollow' : 'follow'} user:`, err);
+        Alert.alert('Error', `Could not ${currentlyFollowing ? 'unfollow' : 'follow'}. Please try again.`);
+        setIsFollowing(currentlyFollowing);
+     } finally {
+        setIsFollowLoading(false);
+     }
   };
 
-  const handleMessage = () => {
-    router.push(`/chat/${player.username}`);
+  const handleMessage = async () => {
+    if (!user || !profile?.id) {
+      Alert.alert("Error", "Cannot initiate chat. User or profile information missing.");
+      return;
+    }
+    if (user.id === profile.id) {
+      Alert.alert("Info", "You cannot message yourself.");
+      return;
+    }
+
+    console.log(`Attempting to find or create chat between ${user.id} and ${profile.id}`);
+    
+    try {
+      const chatRoom = await chatApi.findOrCreateChatRoom(user.id, profile.id);
+      
+      if (chatRoom && chatRoom.id) {
+        console.log(`Navigating to chat with ID: ${chatRoom.id}`);
+        router.push(`/chat/${chatRoom.id}`);
+      } else {
+        Alert.alert("Error", "Could not find or create chat room.");
+      }
+    } catch (error) {
+      console.error("Error finding/creating chat room:", error);
+      Alert.alert("Error", "An error occurred while trying to open the chat.");
+    }
   };
 
   const handleViewActivity = (activityId) => {
+     if (!activityId) return;
+    console.log('Navigate to activity:', activityId);
     router.push(`/activity/${activityId}`);
   };
 
   const handleViewGame = (gameId) => {
+     if (!gameId) return;
+    console.log('Navigate to game:', gameId);
     router.push(`/game/${gameId}`);
   };
+
+  if (isLoading) {
+    return (
+       <View style={styles.loadingContainer}>
+          <Stack.Screen options={{ title: 'Loading Profile...' }} />
+          <ActivityIndicator size="large" color={colors.primary} />
+       </View>
+    );
+  }
+
+  if (error || !profile) {
+    return (
+      <View style={styles.errorContainer}>
+        <Stack.Screen options={{ title: 'Error' }} />
+        <AlertCircle size={40} color={colors.danger} />
+        <Text style={styles.errorText}>{error || 'Profile data could not be loaded.'}</Text>
+        {error && (
+             <Pressable onPress={fetchData} style={styles.retryButton}>
+               <Text style={styles.retryButtonText}>Try Again</Text>
+             </Pressable>
+         )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <Stack.Screen 
         options={{
-          title: player.name,
+          title: profile.name || 'Player Profile',
           headerStyle: {
             backgroundColor: colors.card,
           },
@@ -197,41 +231,65 @@ export default function PlayerDetailsScreen() {
       <ScrollView>
         <View style={styles.header}>
           <Image 
-            source={player.image} 
+            source={profile.avatar_url || 'https://via.placeholder.com/100'}
             style={styles.profileImage}
             contentFit="cover"
+            placeholder={{uri: 'https://via.placeholder.com/100'}}
+            transition={300}
           />
           
           <View style={styles.profileInfo}>
-            <Text style={styles.name}>{player.name}</Text>
-            <Text style={styles.username}>@{player.username}</Text>
+            <Text style={styles.name}>{profile.name}</Text>
+            <Text style={styles.username}>@{profile.username}</Text>
             
+            {profile.location && (
             <View style={styles.locationContainer}>
               <MapPin size={16} color={colors.textLight} />
-              <Text style={styles.locationText}>{player.location}</Text>
+                <Text style={styles.locationText}>{profile.location}</Text>
             </View>
+            )}
             
+            {profile.level && (
             <View style={styles.levelContainer}>
               <Award size={16} color={colors.primary} />
-              <Text style={styles.levelText}>{player.level}</Text>
+                  <Text style={styles.levelText}>{profile.level}</Text>
+               </View>
+            )}
+             <View style={styles.followCounts}>
+                <Text style={styles.followCountText}>
+                   {profile.follower_count ?? 0} <Text style={styles.followCountLabel}>Followers</Text>
+                </Text>
+                <Text style={styles.followCountText}> • </Text>
+                <Text style={styles.followCountText}>
+                   {profile.following_count ?? 0} <Text style={styles.followCountLabel}>Following</Text>
+                </Text>
             </View>
           </View>
         </View>
 
+        {user?.id !== profile.id && (
         <View style={styles.actionButtons}>
           <Pressable 
             style={[
               styles.followButton, 
-              isFollowing && styles.followingButton
-            ]}
-            onPress={handleFollow}
-          >
-            <UserPlus size={20} color={isFollowing ? colors.card : colors.primary} />
+                    isFollowing && styles.followingButton,
+                    isFollowLoading && styles.disabledButton
+                 ]}
+                 onPress={handleFollowToggle}
+                 disabled={isFollowLoading}
+              >
+                 {isFollowLoading ? (
+                    <ActivityIndicator size="small" color={isFollowing ? colors.primary : colors.card} />
+                 ) : isFollowing ? (
+                    <UserCheck size={20} color={colors.card} />
+                 ) : (
+                    <UserPlus size={20} color={colors.primary} />
+                 )}
             <Text style={[
               styles.followButtonText,
               isFollowing && styles.followingButtonText
             ]}>
-              {isFollowing ? 'Following' : 'Follow'}
+                    {isFollowLoading ? '...' : isFollowing ? 'Following' : 'Follow'}
             </Text>
           </Pressable>
           
@@ -243,57 +301,54 @@ export default function PlayerDetailsScreen() {
             <Text style={styles.messageButtonText}>Message</Text>
           </Pressable>
         </View>
+        )}
 
+        {profile.bio && (
         <View style={styles.bioSection}>
-          <Text style={styles.bioText}>{player.bio}</Text>
+            <Text style={styles.bioText}>{profile.bio}</Text>
         </View>
+        )}
 
         <View style={styles.statsSection}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{player.stats.gamesPlayed}</Text>
+            <Text style={styles.statValue}>{profile.stats?.gamesPlayed ?? '-'}</Text>
             <Text style={styles.statLabel}>Games</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{player.stats.wins}</Text>
+            <Text style={styles.statValue}>{profile.stats?.wins ?? '-'}</Text>
             <Text style={styles.statLabel}>Wins</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{player.stats.achievements}</Text>
+            <Text style={styles.statValue}>{profile.stats?.achievements ?? '-'}</Text>
             <Text style={styles.statLabel}>Achievements</Text>
           </View>
         </View>
 
+        {profile.sports && profile.sports.length > 0 && (
         <View style={styles.sportsSection}>
           <Text style={styles.sectionTitle}>Sports</Text>
           <View style={styles.sportsContainer}>
-            {player.sports.map(sport => (
+              {profile.sports.map(sport => (
               <View key={sport} style={styles.sportTag}>
                 <Text style={styles.sportTagText}>{sport}</Text>
               </View>
             ))}
           </View>
         </View>
+        )}
 
-        <View style={styles.availabilitySection}>
-          <Text style={styles.sectionTitle}>Availability</Text>
-          <View style={styles.availabilityContainer}>
-            <Clock size={18} color={colors.primary} />
-            <Text style={styles.availabilityText}>{player.availability}</Text>
-          </View>
-        </View>
-
-        {player.recentActivities.length > 0 && (
+        {recentActivities.length > 0 && (
           <View style={styles.activitiesSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent Activities</Text>
-              <Pressable onPress={() => router.push(`/profile/${player.id}/activities`)}>
+              <Pressable onPress={() => router.push(`/player/${profileId}/activities`)}>
                 <Text style={styles.seeAllText}>See All</Text>
               </Pressable>
             </View>
             
-            {player.recentActivities.map(activity => (
+            {recentActivities.map(activity => (
               <Pressable 
                 key={activity.id} 
                 style={styles.activityCard}
@@ -329,16 +384,16 @@ export default function PlayerDetailsScreen() {
           </View>
         )}
 
-        {player.upcomingGames.length > 0 && (
+        {upcomingGames.length > 0 && (
           <View style={styles.gamesSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Upcoming Games</Text>
-              <Pressable onPress={() => router.push(`/profile/${player.id}/games`)}>
+              <Pressable onPress={() => router.push(`/player/${profileId}/games`)}>
                 <Text style={styles.seeAllText}>See All</Text>
               </Pressable>
             </View>
             
-            {player.upcomingGames.map(game => (
+            {upcomingGames.map(game => (
               <Pressable 
                 key={game.id} 
                 style={styles.gameCard}
@@ -350,7 +405,7 @@ export default function PlayerDetailsScreen() {
                 
                 <View style={styles.gameInfo}>
                   <Text style={styles.gameType}>{game.type}</Text>
-                  <Text style={styles.gameMeta}>{game.date} • {game.location}</Text>
+                  <Text style={styles.gameMeta}>{formatDateTime(game.date)} • {game.location}</Text>
                   <Text style={styles.gameParticipants}>
                     {game.participants} participants
                   </Text>
@@ -371,6 +426,37 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  loadingContainer: {
+     flex: 1,
+     justifyContent: 'center',
+     alignItems: 'center',
+     backgroundColor: colors.background,
+  },
+  errorContainer: {
+     flex: 1,
+     justifyContent: 'center',
+     alignItems: 'center',
+     padding: 20,
+     backgroundColor: colors.background,
+  },
+  errorText: {
+     fontSize: 16,
+     color: colors.danger,
+     textAlign: 'center',
+     marginTop: 10,
+     marginBottom: 20,
+  },
+  retryButton: {
+     backgroundColor: colors.primary,
+     paddingVertical: 10,
+     paddingHorizontal: 20,
+     borderRadius: 8,
+  },
+  retryButtonText: {
+     color: colors.card,
+     fontSize: 16,
+     fontWeight: '500',
+  },
   header: {
     flexDirection: 'row',
     padding: 20,
@@ -383,6 +469,8 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     marginRight: 16,
+    borderWidth: 2,
+    borderColor: colors.primaryLight,
   },
   profileInfo: {
     flex: 1,
@@ -397,12 +485,12 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 16,
     color: colors.textLight,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   locationText: {
     fontSize: 14,
@@ -412,12 +500,26 @@ const styles = StyleSheet.create({
   levelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
   levelText: {
     fontSize: 14,
     color: colors.primary,
     fontWeight: '500',
     marginLeft: 6,
+  },
+  followCounts: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginTop: 4,
+  },
+  followCountText: {
+     fontSize: 14,
+     color: colors.textLight,
+  },
+  followCountLabel: {
+      fontWeight: '500',
+      color: colors.text,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -461,6 +563,9 @@ const styles = StyleSheet.create({
     color: colors.card,
     fontWeight: '600',
   },
+  disabledButton: {
+     opacity: 0.7,
+  },
   bioSection: {
     padding: 16,
     backgroundColor: colors.card,
@@ -500,7 +605,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   sportsSection: {
-    padding: 16,
+    paddingHorizontal: 16,
     marginBottom: 16,
   },
   sectionTitle: {
@@ -526,7 +631,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   availabilitySection: {
-    padding: 16,
+    paddingHorizontal: 16,
     marginBottom: 16,
   },
   availabilityContainer: {
@@ -542,7 +647,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   activitiesSection: {
-    padding: 16,
+    paddingHorizontal: 16,
     marginBottom: 16,
   },
   sectionHeader: {
@@ -589,6 +694,7 @@ const styles = StyleSheet.create({
   },
   activityDetails: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   activityDetail: {
@@ -598,9 +704,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
+    overflow: 'hidden',
   },
   gamesSection: {
-    padding: 16,
+    paddingHorizontal: 16,
     marginBottom: 16,
   },
   gameCard: {
@@ -637,16 +744,6 @@ const styles = StyleSheet.create({
   gameParticipants: {
     fontSize: 14,
     color: colors.text,
-  },
-  notFound: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  notFoundText: {
-    fontSize: 16,
-    color: colors.textLight,
   },
   shareButton: {
     padding: 8,

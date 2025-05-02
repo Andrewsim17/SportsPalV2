@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Modal, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { ArrowLeft, Camera, MapPin, Clock, Activity, ChevronDown, Save, Map, Droplets, Thermometer, Wind, Mountain, Footprints, Bike, Heart } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
+import { activitiesApi } from '../../lib/api';
+import { useAuthStore } from '../../store/auth-store';
 
 const SPORT_TYPES = [
   { id: 'running', name: 'Running', icon: Footprints },
@@ -19,6 +21,7 @@ const SPORT_TYPES = [
 
 export default function RecordActivityScreen() {
   const router = useRouter();
+  const { user, refreshProfile } = useAuthStore();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedSport, setSelectedSport] = useState(SPORT_TYPES[0]);
@@ -31,17 +34,57 @@ export default function RecordActivityScreen() {
   const [heartRate, setHeartRate] = useState('');
   const [temperature, setTemperature] = useState('');
   const [weather, setWeather] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    if (!title) {
-      Alert.alert('Missing Information', 'Please add a title for your activity');
+  const handleSave = async () => {
+    if (!user) {
+      Alert.alert('Login Required', 'You must be logged in to save an activity.');
+      return;
+    }
+    
+    if (!title && !description) {
+      Alert.alert('Missing Information', 'Please add a title or description for your activity post.');
       return;
     }
 
-    // Here you would normally save the activity to your backend or local storage
-    Alert.alert('Success', 'Activity saved successfully!', [
-      { text: 'OK', onPress: () => router.back() }
-    ]);
+    setIsSaving(true);
+
+    const activityDetails = {};
+    if (description) activityDetails.description = description;
+    if (distance) activityDetails.distance_km = parseFloat(distance) || null;
+    if (duration) activityDetails.duration_min = parseFloat(duration) || null;
+    if (elevation) activityDetails.elevation_m = parseFloat(elevation) || null;
+    if (pace) activityDetails.pace_min_km = pace;
+    if (calories) activityDetails.calories_kcal = parseFloat(calories) || null;
+    if (heartRate) activityDetails.avg_heart_rate_bpm = parseFloat(heartRate) || null;
+    if (temperature) activityDetails.temperature_c = parseFloat(temperature) || null;
+    if (weather) activityDetails.weather_condition = weather;
+
+    const activityData = {
+      user_id: user.id,
+      type: 'quick_post',
+      sport: selectedSport.id, 
+      content: title || `${selectedSport.name} Activity`,
+      details: Object.keys(activityDetails).length > 0 ? activityDetails : null,
+    };
+
+    try {
+      console.log("Saving manual activity data:", activityData);
+      const savedActivity = await activitiesApi.createActivity(activityData);
+      console.log("Manual activity saved successfully:", savedActivity);
+      
+      // Refresh profile to update activity counts
+      await refreshProfile();
+
+      Alert.alert('Success', 'Activity saved successfully!', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
+    } catch (error) {
+      console.error("Failed to save manual activity:", error);
+      Alert.alert('Save Failed', error.message || 'Could not save activity. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const renderSportPicker = () => {
@@ -382,7 +425,7 @@ export default function RecordActivityScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Record Activity',
+          title: 'Log Activity / Quick Post',
           headerStyle: {
             backgroundColor: colors.card,
           },
@@ -394,8 +437,11 @@ export default function RecordActivityScreen() {
             </Pressable>
           ),
           headerRight: () => (
-            <Pressable onPress={handleSave} style={styles.headerButton}>
-              <Save size={24} color={colors.primary} />
+            <Pressable onPress={handleSave} disabled={isSaving} style={styles.headerButton}>
+              {isSaving ? 
+                <ActivityIndicator size="small" color={colors.primary} /> : 
+                <Save size={24} color={colors.primary} />
+              }
             </Pressable>
           ),
         }}
@@ -459,16 +505,16 @@ export default function RecordActivityScreen() {
           </Pressable>
         </View>
 
-        <LinearGradient
-          colors={[colors.primary, colors.primaryLight]}
-          style={styles.saveButton}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <Pressable 
+          style={[styles.saveButton, isSaving && styles.disabledButton]} 
+          onPress={handleSave} 
+          disabled={isSaving}
         >
-          <Pressable onPress={handleSave} style={styles.saveButtonInner}>
+          {isSaving ? 
+            <ActivityIndicator color={colors.card} /> : 
             <Text style={styles.saveButtonText}>Save Activity</Text>
-          </Pressable>
-        </LinearGradient>
+          }
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -481,6 +527,7 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     padding: 8,
+    marginRight: 8,
   },
   scrollView: {
     flex: 1,
@@ -609,13 +656,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   saveButton: {
-    margin: 16,
+    backgroundColor: colors.primary,
     borderRadius: 12,
-    marginBottom: 32,
-  },
-  saveButtonInner: {
     padding: 16,
     alignItems: 'center',
+    marginTop: 24,
+  },
+  disabledButton: {
+    opacity: 0.6,
+    backgroundColor: colors.primaryLight,
   },
   saveButtonText: {
     color: colors.card,

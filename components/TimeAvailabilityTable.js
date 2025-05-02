@@ -15,7 +15,14 @@ const generateTimeSlots = () => {
 
 const TIME_SLOTS = generateTimeSlots();
 
-export default function TimeAvailabilityTable({ onSelectTime, showAllCourts = false, courts = [], sportType = '' }) {
+export default function TimeAvailabilityTable({
+  onSelectTime,
+  showAllCourts = false,
+  courts = [],
+  sportType = '',
+  bookedSlots = [],
+  selectedDate
+}) {
   const [selectedTime, setSelectedTime] = useState(null);
 
   const handleTimeSelect = (time, courtId) => {
@@ -29,25 +36,24 @@ export default function TimeAvailabilityTable({ onSelectTime, showAllCourts = fa
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
-  // Mock availability data - in a real app, this would come from an API
-  const getAvailability = (time, courtId) => {
-    const hour = time.getHours();
-    const courtIndex = parseInt(courtId.replace(/\D/g, '')) || 0;
-    
-    // Create different availability patterns for different courts
-    if (courtIndex % 2 === 0) {
-      // Even-numbered courts
-      if (hour === 12 || hour === 13 || hour === 18) {
-        return 'unavailable';
-      }
-    } else {
-      // Odd-numbered courts
-      if (hour === 17 || hour === 19 || hour === 20) {
-        return 'unavailable';
-      }
-    }
-    
-    return 'available';
+  // Determine availability based on fetched bookings
+  const getAvailability = (timeSlotDate, courtId) => {
+    const slotStart = new Date(selectedDate); // Start with selected date
+    slotStart.setHours(timeSlotDate.getHours(), timeSlotDate.getMinutes(), 0, 0);
+
+    const slotEnd = new Date(slotStart);
+    slotEnd.setHours(slotStart.getHours() + 1); // Assuming 1-hour slots
+
+    // Check if any booking for this court overlaps with this time slot
+    const isBooked = bookedSlots.some(booking => {
+      if (booking.court_id !== courtId) return false;
+      const bookingStart = new Date(booking.start_time);
+      const bookingEnd = new Date(booking.end_time);
+      // Check for overlap: (SlotStart < BookingEnd) and (SlotEnd > BookingStart)
+      return slotStart < bookingEnd && slotEnd > bookingStart;
+    });
+
+    return isBooked ? 'unavailable' : 'available';
   };
 
   return (
@@ -55,6 +61,10 @@ export default function TimeAvailabilityTable({ onSelectTime, showAllCourts = fa
       {!sportType ? (
         <View style={styles.noCourt}>
           <Text style={styles.noCourtText}>Please select a sport first</Text>
+        </View>
+      ) : !courts || courts.length === 0 ? (
+        <View style={styles.noCourt}>
+          <Text style={styles.noCourtText}>No {sportType} courts available at this venue.</Text>
         </View>
       ) : (
         <>

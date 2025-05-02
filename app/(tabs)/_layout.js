@@ -23,6 +23,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Home size={24} color={color} />,
         }}
       />
+        <Tabs.Screen
+        name="explore"
+        options={{
+          title: 'Explore',
+          tabBarIcon: ({ color }) => <Compass size={24} color={color} />,
+        }}
+      />
       <Tabs.Screen
         name="games"
         options={{
@@ -31,17 +38,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="venues"
+        name="venue"
         options={{
           title: 'Venues',
           tabBarIcon: ({ color }) => <Building2 size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <Compass size={24} color={color} />,
         }}
       />
       <Tabs.Screen

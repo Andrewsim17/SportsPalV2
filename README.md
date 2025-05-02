@@ -1,50 +1,84 @@
-# Welcome to your Expo app 👋
+# SportsPal App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A social sports app that helps users find games, organize activities, and connect with other sports enthusiasts.
 
-## Get started
+## Backend Setup with Supabase
 
-1. Install dependencies
+This project uses Supabase as the backend. To set up the backend:
 
-   ```bash
-   npm install
+1. Apply the SQL migrations in the `sql/migrations` folder to your Supabase project in the following order:
+   - `0000_init/up.sql`
+   - `0001_auth/up.sql`
+   - `0002_games/up.sql`
+   - `0003_social/up.sql`
+   - `0004_venues/up.sql`
+   - `0005_sample_data/up.sql` (optional, for testing)
+
+2. Update the Supabase credentials in `lib/supabase.js`:
+   ```javascript
+   const supabaseUrl = 'https://your-project-id.supabase.co';
+   const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
    ```
 
-2. Start the app
+3. Enable Email/Password authentication in your Supabase project:
+   - Go to Authentication > Providers > Email
+   - Enable "Email Signup"
+   - Configure other settings as needed
 
-   ```bash
-    npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Getting Started
 
 ```bash
-npm run reset-project
+# Install dependencies
+npm install
+
+# Start the development server
+npm run start
+
+# Run on iOS
+npm run ios
+
+# Run on Android
+npm run android
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Features
 
-## Learn more
+- **Authentication**: Sign up, login, and profile management
+- **Games**: Find, join, and organize sports games
+- **Venues**: Discover and book sports venues
+- **Activities**: Track and share sports activities
+- **Social**: Connect with friends and chat with other users
+- **Wallet**: Manage in-app credits and transactions
 
-To learn more about developing your project with Expo, look at the following resources:
+## Tech Stack
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- **Frontend**: React Native with Expo
+- **Backend**: Supabase (PostgreSQL + Auth + Storage)
+- **State Management**: Zustand
+- **Navigation**: Expo Router
+- **UI Components**: Custom components with Expo linear gradient
 
-## Join the community
+## Database Schema
 
-Join our community of developers creating universal apps.
+The database schema includes tables for:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Users and profiles
+- Games and participants
+- Activities and interactions
+- Venues and bookings
+- Social features (friendships, chat, notifications)
+- Wallet and transactions
+
+See `sql/README.md` for more details on the database schema.
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m 'Add some amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

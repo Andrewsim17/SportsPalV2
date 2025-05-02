@@ -1,119 +1,14 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl, Text, Pressable, Share, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, FlatList, RefreshControl, Text, Pressable, Share, Alert, Modal, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Clock, TrendingUp, Activity as ActivityIcon, Heart, MessageCircle, Share2, Bell, MessageSquare, Plus } from 'lucide-react-native';
-import { colors } from '../../constants/colors';
+import { Clock, TrendingUp, Activity as ActivityIcon, Heart, MessageCircle, Share2, Bell, MessageSquare, Plus, Video, Edit, MapPin } from 'lucide-react-native';
+import { colors } from '@/constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const MOCK_ACTIVITIES = [
-  {
-    id: '1',
-    userId: 'user1',
-    userName: 'Sarah Johnson',
-    userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-    sport: 'running',
-    title: 'Morning Run',
-    stats: {
-      distance: 5.2,
-      pace: '5:30',
-      elevation: 125,
-    },
-    date: '2024-02-20T08:00:00Z',
-    kudos: 12,
-    comments: 3,
-    image: 'https://images.unsplash.com/photo-1502904550040-7534597429ae?q=80&w=1000',
-    liked: false,
-  },
-  {
-    id: '2',
-    userId: 'user2',
-    userName: 'Mike Chen',
-    userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200',
-    sport: 'cycling',
-    title: 'Weekend Ride',
-    stats: {
-      distance: 25.8,
-      pace: '18km/h',
-      elevation: 350,
-    },
-    date: '2024-02-20T10:00:00Z',
-    kudos: 18,
-    comments: 5,
-    image: 'https://images.unsplash.com/photo-1541625602330-2277a4c46182?q=80&w=1000',
-    liked: true,
-  },
-  {
-    id: '3',
-    userId: 'user3',
-    userName: 'David Lee',
-    userAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200',
-    sport: 'badminton',
-    title: 'Badminton Session',
-    stats: {
-      duration: 90,
-      matches: 5,
-      wins: 3,
-      opponents: 'Alex & Sarah',
-      location: 'Elite Sports Hall',
-    },
-    date: '2024-02-19T18:30:00Z',
-    kudos: 9,
-    comments: 2,
-    image: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1000',
-    liked: false,
-    description: 'Had an amazing badminton session today! Played 5 matches and won 3. My smash technique is definitely improving. Looking forward to the next session!',
-  },
-  {
-    id: '4',
-    userId: 'user4',
-    userName: 'Emma Wilson',
-    userAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-    sport: 'basketball',
-    title: '3v3 Basketball Game',
-    stats: {
-      duration: 60,
-      points: 12,
-      assists: 5,
-      rebounds: 8,
-      team: 'Wildcats',
-      location: 'Downtown Sports Center',
-    },
-    date: '2024-02-18T19:00:00Z',
-    kudos: 15,
-    comments: 4,
-    image: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1000',
-    liked: true,
-    description: 'Great 3v3 game today! Scored 12 points with 5 assists and 8 rebounds. Our team chemistry is getting better with each game. Can\'t wait for the tournament next week!',
-  },
-];
-
-const WeeklyStats = () => (
-  <LinearGradient
-    colors={[colors.primary, colors.primaryLight]}
-    style={styles.statsContainer}
-    start={{ x: 0, y: 0 }}
-    end={{ x: 1, y: 1 }}
-  >
-    <View style={styles.statItem}>
-      <Clock size={24} color={colors.card} />
-      <Text style={styles.statValue}>5h 23m</Text>
-      <Text style={styles.statLabel}>This Week</Text>
-    </View>
-    <View style={styles.statDivider} />
-    <View style={styles.statItem}>
-      <ActivityIcon size={24} color={colors.card} />
-      <Text style={styles.statValue}>8</Text>
-      <Text style={styles.statLabel}>Activities</Text>
-    </View>
-    <View style={styles.statDivider} />
-    <View style={styles.statItem}>
-      <TrendingUp size={24} color={colors.card} />
-      <Text style={styles.statValue}>475m</Text>
-      <Text style={styles.statLabel}>Elevation</Text>
-    </View>
-  </LinearGradient>
-);
+import { chatApi, notificationsApi } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../store/auth-store';
+import { formatTimeAgo } from '../../utils/date';
 
 function ActivityCard({ activity, onToggleLike, onComment, onPress, onShare }) {
   const getSportSpecificStats = () => {
@@ -182,7 +77,7 @@ function ActivityCard({ activity, onToggleLike, onComment, onPress, onShare }) {
         />
         <View style={styles.headerText}>
           <Text style={styles.userName}>{activity.userName}</Text>
-          <Text style={styles.activityDate}>2 hours ago • {activity.sport}</Text>
+          <Text style={styles.activityDate}>{formatTimeAgo(activity.date)} • {activity.sport}</Text>
         </View>
       </View>
 
@@ -233,27 +128,253 @@ function ActivityCard({ activity, onToggleLike, onComment, onPress, onShare }) {
 }
 
 export default function FeedScreen() {
+  const [activities, setActivities] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [activities, setActivities] = useState(MOCK_ACTIVITIES);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const router = useRouter();
+  const { user } = useAuthStore();
 
-  const onRefresh = React.useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+  const fetchActivities = useCallback(async () => {
+    console.log("Fetching personalized activities...");
+    if (!user?.id) {
+      console.log("User not logged in, cannot fetch feed.");
+      setIsLoading(false);
+      setRefreshing(false);
+      setActivities([]); // Clear activities if user logs out
+      return;
+    }
+    if (!refreshing) {
+        setIsLoading(true);
+    }
+    setError(null);
+    try {
+      // 1. Get IDs of users the current user follows
+      const { data: followingData, error: followingError } = await supabase
+        .from('followers')
+        .select('following_id')
+        .eq('follower_id', user.id);
 
-  const handleToggleLike = (activityId) => {
-    setActivities(activities.map(activity => {
-      if (activity.id === activityId) {
-        const newLiked = !activity.liked;
-        return {
-          ...activity,
-          liked: newLiked,
-          kudos: newLiked ? activity.kudos + 1 : activity.kudos - 1
-        };
+      if (followingError) {
+        throw followingError; // Throw error to be caught by catch block
       }
-      return activity;
-    }));
+
+      // Extract just the IDs into an array and add the current user's ID
+      const followingIds = followingData.map(f => f.following_id);
+      followingIds.push(user.id); // Include user's own activities
+
+      console.log("Fetching activities for user IDs:", followingIds);
+
+      // 2. Fetch activities from the 'activities' table where user_id is in the list
+      // Also fetch related profile info (username, avatar_url)
+      // Fetch likes count and comments count using rpc might be more efficient later
+      // For now, fetch likes array and comments count directly
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from('activities')
+        .select(`
+          *,
+          user:user_id ( name, avatar_url ),
+          likes:activity_likes ( user_id ),
+          comments:activity_comments ( count )
+        `)
+        .in('user_id', followingIds)
+        .order('created_at', { ascending: false })
+        .limit(20); // Add a limit for pagination later
+
+      if (activitiesError) {
+        throw activitiesError; // Throw error to be caught by catch block
+      }
+
+      console.log("Fetched raw activities:", activitiesData.length);
+
+      // 3. Adapt the fetched data to the format expected by ActivityCard
+      const adaptedActivities = activitiesData.map(act => {
+        const likesList = act.likes || [];
+        const currentUserLiked = likesList.some(like => like.user_id === user.id);
+        const likeCount = likesList.length;
+        
+        // Ensure comments count is accessed correctly (it's an array with one object)
+        const commentsCount = act.comments && act.comments.length > 0 ? act.comments[0].count : 0;
+
+        return {
+          id: act.id,
+          userId: act.user?.id, // user_id from the activities table
+          userName: act.user?.name || 'Unknown User',
+          userAvatar: act.user?.avatar_url || 'https://ui-avatars.com/api/?name=U&background=6C5CE7&color=fff',
+          sport: act.type,
+          title: act.content,
+          stats: act.details || {}, // Assuming 'details' field holds stats
+          date: act.created_at,
+          kudos: likeCount,
+          comments: commentsCount,
+          image: null, // TODO: Populate image if available in 'act' (e.g., act.image_url)
+          liked: currentUserLiked,
+          description: null, // TODO: Populate description if available in 'act'
+        };
+      });
+      
+      console.log("Adapted activities:", adaptedActivities.length);
+      setActivities(adaptedActivities);
+
+    } catch (err) {
+      console.error("Failed to fetch personalized activities:", err);
+      setError(err.message || 'Failed to load activities');
+      setActivities([]); // Clear activities on error
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+      console.log("Finished fetching personalized activities.");
+    }
+  }, [refreshing, user?.id]);
+
+  // Function to fetch unread count
+  const fetchUnreadCount = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      console.log('Fetching initial unread message count...');
+      const count = await chatApi.getUnreadMessageCount(user.id);
+      console.log('Initial unread count:', count);
+      setUnreadMessageCount(count);
+    } catch (error) {
+      console.error('Error fetching initial unread count:', error);
+    }
+  }, [user?.id]);
+
+  // Function to fetch unread notification count
+  const fetchUnreadNotificationCount = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      console.log('Fetching initial unread notification count...');
+      const count = await notificationsApi.getUnreadNotificationCount(user.id);
+      console.log('Initial unread notification count:', count);
+      setUnreadNotificationCount(count);
+    } catch (error) {
+      console.error('Error fetching initial unread notification count:', error);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchActivities();
+    fetchUnreadCount();
+    fetchUnreadNotificationCount();
+
+    // --- Realtime Chat Subscription Setup ---
+    if (!user?.id) return; // Need user ID for subscriptions
+    console.log('Setting up realtime subscription for ALL new messages...');
+    const chatChannel = supabase.channel('public:messages:all')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'messages' }, 
+        (payload) => {
+          console.log('New message detected (any chat):', payload);
+          fetchUnreadCount(); // Refetch chat count
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime ALL message subscription established!');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Realtime subscription error:', status, err);
+        } else if (status === 'CLOSED') {
+          console.log('Realtime message subscription closed.');
+        }
+      });
+
+    // --- Realtime Notification Subscription Setup ---
+    console.log('Setting up realtime subscription for new notifications...');
+    const notificationChannel = supabase.channel('public:notifications:user') // Unique channel name
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'notifications', 
+          filter: `user_id=eq.${user.id}` // Filter for user's notifications
+        }, 
+        (payload) => {
+          console.log('New notification received:', payload);
+          // Refetch the count when a new notification arrives for the user
+          fetchUnreadNotificationCount(); 
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime notification subscription established!');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Realtime notification subscription error:', status, err);
+        } else if (status === 'CLOSED') {
+          console.log('Realtime notification subscription closed.');
+        }
+      });
+
+    // --- Cleanup Function ---
+    return () => {
+      console.log('Removing realtime subscriptions...');
+      supabase.removeChannel(chatChannel).catch(error => console.error('Error removing chat channel:', error));
+      supabase.removeChannel(notificationChannel).catch(error => console.error('Error removing notification channel:', error));
+    };
+    
+  }, [fetchActivities, fetchUnreadCount, fetchUnreadNotificationCount, user?.id]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchActivities(); // Refetch on pull-to-refresh
+  }, [fetchActivities]);
+
+  const handleToggleLike = async (activityId) => { // Make async
+    if (!user) {
+      Alert.alert('Login Required', 'Please log in to like activities.');
+      return;
+    }
+
+    // Find the current state before toggling
+    const originalActivities = [...activities];
+    const activityIndex = activities.findIndex(act => act.id === activityId);
+    if (activityIndex === -1) return;
+    
+    const activity = activities[activityIndex];
+    const wasLiked = activity.liked;
+    const newLiked = !wasLiked;
+    const newKudos = newLiked ? activity.kudos + 1 : activity.kudos - 1;
+
+    // 1. Optimistic UI Update
+    setActivities(currentActivities => 
+      currentActivities.map(act => 
+        act.id === activityId 
+          ? { ...act, liked: newLiked, kudos: Math.max(0, newKudos) }
+          : act
+      )
+    );
+
+    // 2. API Call
+    try {
+      if (newLiked) {
+        console.log(`API: Liking activity ${activityId} for user ${user.id}`);
+        await activitiesApi.likeActivity(activityId, user.id);
+        console.log(`API: Liked activity ${activityId} successfully.`);
+      } else {
+        console.log(`API: Unliking activity ${activityId} for user ${user.id}`);
+        await activitiesApi.unlikeActivity(activityId, user.id);
+        console.log(`API: Unliked activity ${activityId} successfully.`);
+      }
+    } catch (error) {
+      console.error(`Failed to ${newLiked ? 'like' : 'unlike'} activity ${activityId}:`, error);
+      
+      // Check if it's a duplicate key error during a LIKE attempt
+      const isDuplicateLikeError = newLiked && error?.code === '23505';
+      
+      if (isDuplicateLikeError) {
+        // It's already liked in the DB, which matches our optimistic UI update.
+        // Log it, but don't revert or show a generic error alert.
+        console.log(`Info: Activity ${activityId} already liked by user ${user.id}. UI state consistent.`);
+      } else {
+        // For any other error, or errors during UNLIKE, show alert and revert UI.
+        Alert.alert('Error', `Could not ${newLiked ? 'like' : 'unlike'} the activity. Please try again.`);
+        // Revert UI on Error
+        setActivities(originalActivities); 
+      }
+    }
   };
 
   const handleComment = (activityId) => {
@@ -284,31 +405,75 @@ export default function FeedScreen() {
   };
 
   const handleAddActivity = () => {
-    // Show action sheet to choose between quick post or record activity
-    Alert.alert(
-      'Add Activity',
-      'Choose an option',
-      [
-        {
-          text: 'Record Activity',
-          onPress: () => router.push('/activity/record'),
-        },
-        {
-          text: 'Record Live Activity',
-          onPress: () => router.push('/activity/record-live'),
-        },
-        {
-          text: 'Quick Post',
-          onPress: () => router.push('/activity/record'),
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ],
-      { cancelable: true }
-    );
+    setShowAddMenu(!showAddMenu);
   };
+
+  const handleRecordActivity = () => {
+    setShowAddMenu(false);
+    router.push('/activity/record');
+  };
+
+  const handleRecordLiveActivity = () => {
+    setShowAddMenu(false);
+    router.push('/activity/record-live');
+  };
+
+  const handleQuickPost = () => {
+    setShowAddMenu(false);
+    router.push('/activity/record');
+  };
+
+  const renderContent = () => {
+    if (isLoading && activities.length === 0) {
+      return <ActivityIndicator size="large" color={colors.primary} style={styles.centered} />;
+    }
+
+    if (error) {
+      return (
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <Pressable onPress={fetchActivities}>
+            <Text style={styles.retryText}>Try Again</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    return (
+      <FlatList
+        data={activities}
+        renderItem={({ item }) => (
+          <ActivityCard 
+            activity={item} 
+            onToggleLike={handleToggleLike}
+            onComment={handleComment}
+            onPress={() => handleActivityPress(item.id)}
+            onShare={handleShareActivity}
+          />
+        )}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={
+          !isLoading && (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No activities found in your feed yet.</Text>
+              <Pressable onPress={onRefresh}>
+                 <Text style={styles.retryText}>Refresh Feed</Text>
+              </Pressable>
+            </View>
+          )
+        }
+        contentContainerStyle={styles.listContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -326,55 +491,96 @@ export default function FeedScreen() {
                 style={styles.headerButton}
                 onPress={handleAddActivity}
               >
-                <View style={styles.addButton}>
-                  <Plus size={20} color={colors.card} />
-                </View>
+                 <Plus size={24} color={colors.primary} /> 
               </Pressable>
-              <Pressable 
-                style={styles.headerButton}
-                onPress={handleOpenChat}
-              >
-                <MessageSquare size={24} color={colors.primary} />
-                <View style={styles.chatBadge}>
-                  <Text style={styles.notificationBadgeText}>2</Text>
-                </View>
-              </Pressable>
+              
               <Pressable 
                 style={styles.headerButton}
                 onPress={handleOpenNotifications}
               >
                 <Bell size={24} color={colors.primary} />
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationBadgeText}>3</Text>
+                {unreadNotificationCount > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                    </Text>
                 </View>
+                )}
+              </Pressable>
+              
+              <Pressable 
+                style={styles.headerButton}
+                onPress={handleOpenChat}
+              >
+                <MessageSquare size={24} color={colors.primary} />
+                {unreadMessageCount > 0 && (
+                <View style={styles.chatBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                    </Text>
+                </View>
+                )}
               </Pressable>
             </View>
           ),
         }} 
       />
       
-      <FlatList
-        data={activities}
-        renderItem={({ item }) => (
-          <ActivityCard 
-            activity={item} 
-            onToggleLike={handleToggleLike}
-            onComment={handleComment}
-            onPress={() => handleActivityPress(item.id)}
-            onShare={handleShareActivity}
-          />
-        )}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
-        }
-        ListHeaderComponent={WeeklyStats}
-      />
+      {showAddMenu && (
+        <Modal
+          transparent={true}
+          visible={showAddMenu}
+          animationType="fade"
+          onRequestClose={() => setShowAddMenu(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowAddMenu(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.addMenuContainer}>
+                <Pressable 
+                  style={styles.addMenuItem}
+                  onPress={handleRecordActivity}
+                >
+                  <View style={[styles.addMenuIcon, { backgroundColor: colors.primary }]}>
+                    <Edit size={20} color={colors.card} />
+                  </View>
+                  <View style={styles.addMenuTextContainer}>
+                    <Text style={styles.addMenuTitle}>Record Activity</Text>
+                    <Text style={styles.addMenuDescription}>Log a completed activity</Text>
+                  </View>
+                </Pressable>
+                
+                <Pressable 
+                  style={styles.addMenuItem}
+                  onPress={handleRecordLiveActivity}
+                >
+                  <View style={[styles.addMenuIcon, { backgroundColor: colors.danger }]}>
+                    <Video size={20} color={colors.card} />
+                  </View>
+                  <View style={styles.addMenuTextContainer}>
+                    <Text style={styles.addMenuTitle}>Record Live Activity</Text>
+                    <Text style={styles.addMenuDescription}>Track your activity in real-time</Text>
+                  </View>
+                </Pressable>
+                
+                <Pressable 
+                  style={styles.addMenuItem}
+                  onPress={handleQuickPost}
+                >
+                  <View style={[styles.addMenuIcon, { backgroundColor: colors.success }]}>
+                    <MapPin size={20} color={colors.card} />
+                  </View>
+                  <View style={styles.addMenuTextContainer}>
+                    <Text style={styles.addMenuTitle}>Quick Post</Text>
+                    <Text style={styles.addMenuDescription}>Share a quick update</Text>
+                  </View>
+                </Pressable>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
+      
+      {renderContent()}
     </View>
   );
 }
@@ -393,14 +599,6 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: 8,
     position: 'relative',
-  },
-  addButton: {
-    backgroundColor: colors.primary,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   notificationBadge: {
     position: 'absolute',
@@ -433,37 +631,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  list: {
+  listContainer: {
     paddingBottom: 16,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    margin: 16,
-    padding: 16,
-    borderRadius: 16,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statValue: {
-    color: colors.card,
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  statLabel: {
-    color: colors.card,
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  statDivider: {
-    width: 1,
-    height: '100%',
-    backgroundColor: colors.card,
-    opacity: 0.2,
+    paddingTop: 16,
   },
   card: {
     backgroundColor: colors.card,
@@ -573,5 +743,79 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 14,
     color: colors.textLight,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  addMenuContainer: {
+    position: 'absolute',
+    top: 60,
+    right: 16,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+    width: 280,
+  },
+  addMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+  },
+  addMenuIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  addMenuTextContainer: {
+    flex: 1,
+  },
+  addMenuTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  addMenuDescription: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 2,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryText: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginBottom: 16,
   },
 });

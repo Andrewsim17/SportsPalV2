@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, TouchableWithoutFeedback, FlatList } from 'react-native';
 import { Clock, ChevronDown, X, Check } from 'lucide-react-native';
 import { colors } from '../constants/colors';
@@ -21,39 +21,76 @@ const TIME_SLOTS = generateTimeSlots();
 export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectingStart, setSelectingStart] = useState(true);
-  const [tempStartTime, setTempStartTime] = useState(startTime || null);
-  const [tempEndTime, setTempEndTime] = useState(endTime || null);
+  const [tempStartTime, setTempStartTime] = useState(null);
+  const [tempEndTime, setTempEndTime] = useState(null);
+  
+  // console.log("TimeRangePicker received props - startTime:", startTime, "endTime:", endTime); // REMOVED
+
+  // Effect to handle logic after temporary times are set
+  useEffect(() => {
+    // If we just selected a start time, switch to selecting end time
+    if (selectingStart && tempStartTime) {
+      // Check if tempEndTime needs to be cleared or adjusted if it's now invalid
+      if (tempEndTime && tempEndTime <= tempStartTime) {
+        setTempEndTime(null);
+        // console.log("Cleared tempEndTime because it was <= new tempStartTime"); // REMOVED
+      }
+      // console.log("useEffect: Start time set, switching to select end time."); // REMOVED
+      setSelectingStart(false);
+    }
+  }, [tempStartTime]); // Run only when tempStartTime changes
+
+  useEffect(() => {
+    // If we just selected an end time, and it's valid, confirm
+    if (!selectingStart && tempEndTime && tempStartTime && tempEndTime.getTime() > tempStartTime.getTime()) {
+      // console.log("useEffect: End time set and valid, calling handleConfirm."); // REMOVED
+      handleConfirm(); 
+    }
+  }, [tempEndTime]); // Run only when tempEndTime changes
+
 
   const toggleModal = () => {
     setModalVisible(!modalVisible);
     if (!modalVisible) {
+      // Reset temporary state when opening modal
+      // console.log("Modal opening: Resetting temp times from props:", startTime, endTime); // REMOVED
       setTempStartTime(startTime || null);
       setTempEndTime(endTime || null);
-      setSelectingStart(true);
+      setSelectingStart(true); // Always start by selecting start time
     }
   };
 
+  // Simplified: Just sets the appropriate temp state
   const handleTimeSelect = (time) => {
+    // console.log(`handleTimeSelect: Time=${time?.toISOString()}, selectingStart=${selectingStart}`); // REMOVED
     if (selectingStart) {
       setTempStartTime(time);
-      setSelectingStart(false);
+      // Logic moved to useEffect
     } else {
-      // Ensure end time is after start time
-      if (time > tempStartTime) {
+      // Check if valid before setting, alert if not
+      if (tempStartTime && time.getTime() > tempStartTime.getTime()) {
         setTempEndTime(time);
-        handleConfirm();
+        // Confirmation logic moved to useEffect
       } else {
-        // Show error or handle invalid selection
+        // console.log("Invalid end time selected (<= start time)."); // REMOVED
         alert('End time must be after start time');
       }
     }
   };
 
   const handleConfirm = () => {
-    if (tempStartTime && tempEndTime) {
+    // Ensure we have valid times before calling back
+    if (tempStartTime && tempEndTime && tempEndTime.getTime() > tempStartTime.getTime()) {
+      // console.log("TimeRangePicker handleConfirm - Calling onSelectTimeRange with:", tempStartTime, tempEndTime); // REMOVED
       onSelectTimeRange(tempStartTime, tempEndTime);
+      toggleModal(); // Close modal only on successful confirm
+    } else {
+        // console.log("handleConfirm called but times invalid:", tempStartTime, tempEndTime); // REMOVED
+        // Optionally alert the user if they press the explicit confirm button with invalid times
+        if (!selectingStart) { // Only show alert if trying to confirm end time
+            alert('Please select a valid end time that is after the start time.')
+        }
     }
-    toggleModal();
   };
 
   const formatTime = (date) => {
@@ -133,7 +170,12 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
                         isTimeSelected(item) && styles.selectedTimeItem,
                         isTimeDisabled(item) && styles.disabledTimeItem
                       ]}
-                      onPress={() => !isTimeDisabled(item) && handleTimeSelect(item)}
+                      onPress={() => {
+                        // console.log(`Time slot pressed: ${formatTime(item)}, selectingStart: ${selectingStart}, isDisabled: ${isTimeDisabled(item)}`); // REMOVED
+                        if (!isTimeDisabled(item)) {
+                          handleTimeSelect(item);
+                        }
+                      }}
                       disabled={isTimeDisabled(item)}
                     >
                       <Text style={[
@@ -153,7 +195,10 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
 
                 {!selectingStart && (
                   <View style={styles.modalFooter}>
-                    <Pressable style={styles.backButton} onPress={() => setSelectingStart(true)}>
+                    <Pressable style={styles.backButton} onPress={() => {
+                        // console.log("Back button pressed"); // REMOVED
+                        setSelectingStart(true);
+                    }}>
                       <Text style={styles.backButtonText}>Back</Text>
                     </Pressable>
                     <Pressable style={styles.confirmButton} onPress={handleConfirm}>

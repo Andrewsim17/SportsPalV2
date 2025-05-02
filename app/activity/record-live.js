@@ -7,7 +7,8 @@ import {
   Alert,
   Modal,
   BackHandler,
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { 
@@ -30,6 +31,8 @@ import {
 import { colors } from '../../constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
+import { activitiesApi } from '../../lib/api';
+import { useAuthStore } from '../../store/auth-store';
 
 const SPORT_TYPES = [
   { id: 'running', name: 'Running', icon: Footprints },
@@ -46,6 +49,7 @@ const SPORT_TYPES = [
 
 export default function RecordLiveScreen() {
   const router = useRouter();
+  const { user, refreshProfile } = useAuthStore();
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -57,6 +61,7 @@ export default function RecordLiveScreen() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [selectedSport, setSelectedSport] = useState(SPORT_TYPES[0]);
   const [showSportPicker, setShowSportPicker] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const timerRef = useRef(null);
   const lastUpdateRef = useRef(Date.now());
@@ -162,12 +167,51 @@ export default function RecordLiveScreen() {
     router.back();
   };
 
-  const handleSave = () => {
-    Alert.alert(
-      'Activity Saved',
-      'Your activity has been saved successfully!',
-      [{ text: 'OK', onPress: () => router.back() }]
-    );
+  const handleSave = async () => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to save an activity.');
+      return;
+    }
+    
+    setIsSaving(true);
+
+    const activityDetails = {
+      duration_seconds: elapsedTime,
+      distance_km: distance,
+      avg_pace_min_km: pace,
+      calories_kcal: calories,
+      elevation_gain_m: elevation,
+    };
+
+    const activityData = {
+      user_id: user.id,
+      type: 'recorded_activity',
+      sport: selectedSport.id,
+      content: `${selectedSport.name} Activity`,
+      details: activityDetails,
+    };
+
+    try {
+      console.log("Saving activity data:", activityData);
+      const savedActivity = await activitiesApi.createActivity(activityData);
+      console.log("Activity saved successfully:", savedActivity);
+
+      await refreshProfile();
+
+      Alert.alert(
+        'Activity Saved',
+        'Your activity has been saved successfully!',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      handleDiscard();
+
+    } catch (error) {
+      console.error("Failed to save activity:", error);
+      Alert.alert('Save Failed', error.message || 'Could not save activity. Please try again.');
+    } finally {
+      setIsSaving(false);
+      setShowExitConfirm(false);
+    }
   };
 
   const handleSelectSport = (sport) => {
@@ -309,8 +353,9 @@ export default function RecordLiveScreen() {
             </Pressable>
             
             <Pressable 
-              style={[styles.controlButton, styles.primaryButton]}
+              style={[styles.controlButton, styles.stopButton]}
               onPress={handleStartStop}
+              disabled={isSaving}
             >
               <Square size={24} color={colors.card} />
             </Pressable>
@@ -358,35 +403,33 @@ export default function RecordLiveScreen() {
         visible={showExitConfirm}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowExitConfirm(false)}
+        onRequestClose={() => !isSaving && setShowExitConfirm(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>End Activity?</Text>
+            <Text style={styles.modalTitle}>Finish Activity?</Text>
             <Text style={styles.modalDescription}>
               Do you want to save or discard this activity?
             </Text>
-            
-            <Pressable 
-              style={[styles.modalButton, styles.saveButton]}
-              onPress={handleSave}
-            >
-              <Text style={styles.saveButtonText}>Save Activity</Text>
-            </Pressable>
-            
-            <Pressable 
-              style={[styles.modalButton, styles.discardButton]}
-              onPress={handleDiscard}
-            >
-              <Text style={styles.discardButtonText}>Discard</Text>
-            </Pressable>
-            
-            <Pressable 
-              style={styles.cancelButton}
-              onPress={() => setShowExitConfirm(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </Pressable>
+            <View style={styles.modalActions}>
+              <Pressable 
+                style={[styles.modalButton, styles.discardButton, isSaving && styles.disabledButton]}
+                onPress={handleDiscard}
+                disabled={isSaving}
+              >
+                <Text style={[styles.modalButtonText, styles.discardButtonText]}>Discard</Text>
+              </Pressable>
+              <Pressable 
+                style={[styles.modalButton, styles.saveButton, isSaving && styles.disabledButton]}
+                onPress={handleSave}
+                disabled={isSaving}
+              >
+                {isSaving ? 
+                  <ActivityIndicator size="small" color={colors.card} /> : 
+                  <Text style={styles.modalButtonText}>Save</Text>
+                }
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -558,6 +601,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.primary,
   },
+  stopButton: {
+    backgroundColor: colors.danger,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -602,11 +648,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  saveButton: {
-    backgroundColor: colors.primary,
-  },
-  saveButtonText: {
-    color: colors.card,
+  modalButtonText: {
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -619,6 +662,17 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 16,
     fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: colors.primary,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   cancelButton: {
     padding: 16,

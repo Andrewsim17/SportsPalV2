@@ -5,13 +5,19 @@ import { MapPin, Star } from 'lucide-react-native';
 import { colors } from '../constants/colors';
 
 export default function VenueCard({ venue, onPress }) {
+  // Determine the image source, using the first image or a placeholder
+  const imageSource = venue?.images && venue.images.length > 0 
+    ? venue.images[0] 
+    : 'https://via.placeholder.com/300/cccccc/ffffff?text=No+Image';
+  // console.log(`VenueCard determined imageSource:`, imageSource);
+
   return (
     <Pressable 
       style={styles.card}
       onPress={onPress}
     >
       <Image
-        source={venue.images[0]}
+        source={imageSource}
         style={styles.image}
         contentFit="cover"
       />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Modal } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -204,11 +204,16 @@ function SubscriptionPlanCard({ plan, isActive, onSelect }) {
 }
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuthStore();
+  const { user, logout, refreshProfile } = useAuthStore();
   const router = useRouter();
   const [showWallet, setShowWallet] = useState(false);
   const [showSubscription, setShowSubscription] = useState(false);
   const [activePlan, setActivePlan] = useState(SUBSCRIPTION_PLANS[0]);
+
+  // Refresh profile data when screen is focused
+  useEffect(() => {
+    refreshProfile();
+  }, []);
 
   const handleLogout = () => {
     logout();

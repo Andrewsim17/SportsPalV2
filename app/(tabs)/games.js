@@ -1,99 +1,117 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { Plus, Search } from 'lucide-react-native';
+import { Plus, Search, RefreshCw } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import GameCard from '../../components/GameCard';
 import SearchBar from '../../components/SearchBar';
-import FilterBar from '../../components/Filterbar';
+import FilterBar from '../../components/FilterBar';
+import { gamesApi } from '../../lib/api'; // Import the games API
+import { useAuthStore } from '../../store/auth-store'; // Import auth store if needed for joining games
 
 const SPORTS = ['All', 'Basketball', 'Tennis', 'Football', 'Volleyball', 'Badminton'];
 
-const MOCK_GAMES = [
-  {
-    id: '1',
-    sport: 'Basketball',
-    title: '3v3 Basketball Tournament',
-    location: 'Downtown Sports Center',
-    city: 'Petaling Jaya',
-    date: '2024-02-25T14:00:00Z',
-    duration: 120,
-    playersNeeded: 6,
-    playersCurrent: 4,
-    level: 'Intermediate',
-    price: 10,
-    organizer: {
-      name: 'Mike Chen',
-      rating: 4.8,
-    },
-  },
-  {
-    id: '2',
-    sport: 'Tennis',
-    title: 'Casual Tennis Doubles',
-    location: 'Central Tennis Club',
-    city: 'Kuala Lumpur',
-    date: '2024-02-26T09:00:00Z',
-    duration: 90,
-    playersNeeded: 4,
-    playersCurrent: 2,
-    level: 'Beginner Friendly',
-    price: 15,
-    organizer: {
-      name: 'Sarah Johnson',
-      rating: 4.9,
-    },
-  },
-  {
-    id: '3',
-    sport: 'Badminton',
-    title: 'Badminton Singles Practice',
-    location: 'Elite Sports Hall',
-    city: 'Shah Alam',
-    date: '2024-02-27T18:00:00Z',
-    duration: 60,
-    playersNeeded: 2,
-    playersCurrent: 1,
-    level: 'Advanced',
-    price: 8,
-    organizer: {
-      name: 'David Lee',
-      rating: 4.7,
-    },
-  },
-];
-
 export default function GamesScreen() {
+  const [games, setGames] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedSport, setSelectedSport] = useState('All');
   const [selectedLocation, setSelectedLocation] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [activeFilters, setActiveFilters] = useState({});
   const router = useRouter();
+  const { user } = useAuthStore(); // Get user for join functionality
+
+  // Function to fetch games based on current filters
+  const fetchGames = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    const filters = {
+      ...activeFilters, // Include price, level etc. from FilterBar
+      sport: selectedSport === 'All' ? null : selectedSport,
+      location: searchQuery || null, // Use search query for location filter for now
+      // We could add more specific filters here (e.g., date)
+    };
+    
+    // Remove null/undefined filters
+    Object.keys(filters).forEach(key => {
+      if (filters[key] === null || filters[key] === undefined || filters[key] === '') {
+        delete filters[key];
+      }
+    });
+
+    try {
+      const fetchedGames = await gamesApi.getGames(filters);
+      
+      // Adapt fetched data structure to GameCard props if needed
+      // Example: Calculating playersCurrent if it's not directly available
+      const adaptedGames = fetchedGames.map(game => ({
+        ...game,
+        playersCurrent: game.participants?.length || 0, // Calculate current players
+        // Ensure organizer data structure matches GameCard expectations
+        organizer: game.organizer ? { name: game.organizer.name, rating: 4.5 /* TODO: Fetch real rating */ } : { name: 'Unknown Organizer', rating: 0 }
+      }));
+      
+      setGames(adaptedGames);
+    } catch (err) {
+      console.error("Failed to fetch games:", err);
+      setError(err.message || 'Failed to load games');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedSport, searchQuery, activeFilters]);
+
+  // Initial fetch and fetch on filter changes
+  useEffect(() => {
+    fetchGames();
+  }, [fetchGames]);
+
+  // Pull-to-refresh handler
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await fetchGames();
+    setIsRefreshing(false);
+  }, [fetchGames]);
 
   const handleGamePress = (gameId) => {
     router.push(`/game/${gameId}`);
   };
 
   const handleCreateGame = () => {
-    router.push('/game/organize');
+    router.push('/game/organize'); // Assuming this route exists for creating games
   };
 
   const applyFilters = (filters) => {
     setActiveFilters(filters);
-    console.log('Applied filters:', filters);
+    // fetchGames will be triggered by the useEffect dependency change
   };
 
-  const handleJoinGame = (game) => {
+  const handleJoinGame = async (game) => {
+    if (!user) {
+      Alert.alert('Login Required', 'You need to be logged in to join games.');
+      router.push('/auth/login'); // Redirect to login
+      return;
+    }
+    
     if (game.playersCurrent >= game.playersNeeded) {
       Alert.alert('Game Full', 'This game is already at capacity.');
       return;
     }
     
+    // Check if user is already a participant
+    const isAlreadyParticipant = game.participants?.some(p => p.player?.id === user.id);
+    if (isAlreadyParticipant) {
+      Alert.alert('Already Joined', 'You are already part of this game.');
+      return;
+    }
+
     Alert.alert(
-      'Join Game',
-      'By joining this game, you are making a commitment to attend. Cancellations may affect your user rating. Do you want to proceed?',
+      'Confirm Join',
+      'Are you sure you want to join this game?',
       [
         {
           text: 'Cancel',
@@ -101,9 +119,18 @@ export default function GamesScreen() {
         },
         {
           text: 'Join',
-          onPress: () => {
-            Alert.alert('Success', 'You have joined the game!');
-            // In a real app, update the game state here
+          onPress: async () => {
+            setIsLoading(true); // Show loading indicator
+            try {
+              await gamesApi.joinGame(game.id, user.id);
+              Alert.alert('Success', 'You have joined the game!');
+              fetchGames(); // Refresh the game list to show updated player count
+            } catch (joinError) {
+              console.error("Failed to join game:", joinError);
+              Alert.alert('Error', joinError.message || 'Could not join the game.');
+            } finally {
+              setIsLoading(false); // Hide loading indicator
+            }
           },
         },
       ]
@@ -121,30 +148,54 @@ export default function GamesScreen() {
     }
   };
 
-  const filteredGames = MOCK_GAMES.filter(game => {
-    // Filter by sport if not "All"
-    const sportMatch = selectedSport === 'All' || game.sport === selectedSport;
-    
-    // Filter by location
-    const locationMatch = !selectedLocation || game.city === selectedLocation;
-    
-    // Filter by search query
-    const searchMatch = !searchQuery || 
-      game.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      game.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      game.sport.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    // Filter by price
-    const priceMatch = !activeFilters.priceRange || 
-      (game.price >= activeFilters.priceRange[0] && game.price <= activeFilters.priceRange[1]);
-    
-    // Filter by level
-    const levelMatch = !activeFilters.levels || 
-      activeFilters.levels.length === 0 || 
-      activeFilters.levels.includes(game.level);
-    
-    return sportMatch && locationMatch && searchMatch && priceMatch && levelMatch;
-  });
+  const renderContent = () => {
+    if (isLoading && games.length === 0 && !isRefreshing) {
+      return <ActivityIndicator size="large" color={colors.primary} style={styles.centered} />;
+    }
+
+    if (error) {
+      return (
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <Pressable onPress={fetchGames}>
+            <Text style={styles.resetText}>Try Again</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    return (
+      <FlatList
+        data={games}
+        renderItem={({ item }) => (
+          <GameCard 
+            game={item} 
+            onPress={() => handleGamePress(item.id)}
+            onJoin={() => handleJoinGame(item)}
+            onShare={() => handleShareGame(item)}
+          />
+        )}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        onRefresh={handleRefresh}
+        refreshing={isRefreshing}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No games found matching your criteria.</Text>
+            <Pressable onPress={() => {
+              setActiveFilters({});
+              setSelectedSport('All');
+              setSelectedLocation('');
+              setSearchQuery('');
+              // fetchGames will be triggered by useEffect
+            }}>
+              <Text style={styles.resetText}>Reset filters</Text>
+            </Pressable>
+          </View>
+        }
+      />
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -173,7 +224,7 @@ export default function GamesScreen() {
         <SearchBar 
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search games..."
+          placeholder="Search games by title, location..."
           onClear={() => setSearchQuery('')}
         />
       )}
@@ -185,35 +236,10 @@ export default function GamesScreen() {
         selectedLocation={selectedLocation}
         onSelectLocation={setSelectedLocation}
         activeFilters={activeFilters}
-        onApplyFilters={applyFilters}
+        onApplyFilters={applyFilters} // Pass applyFilters to FilterBar
       />
 
-      <FlatList
-        data={filteredGames}
-        renderItem={({ item }) => (
-          <GameCard 
-            game={item} 
-            onPress={() => handleGamePress(item.id)}
-            onJoin={() => handleJoinGame(item)}
-            onShare={() => handleShareGame(item)}
-          />
-        )}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No games match your filters</Text>
-            <Pressable onPress={() => {
-              setActiveFilters({});
-              setSelectedSport('All');
-              setSelectedLocation('');
-              setSearchQuery('');
-            }}>
-              <Text style={styles.resetText}>Reset filters</Text>
-            </Pressable>
-          </View>
-        }
-      />
+      {renderContent()}
 
       <Pressable style={styles.createGameButton} onPress={handleCreateGame}>
         <LinearGradient
@@ -244,15 +270,29 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 80, // Extra padding for the FAB
   },
-  emptyContainer: {
+  centered: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    minHeight: 200, // Ensure it takes some space
+  },
   emptyText: {
     fontSize: 16,
     color: colors.textLight,
-    marginBottom: 8,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 16,
   },
   resetText: {
     fontSize: 16,
@@ -263,16 +303,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 24,
     right: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  createGameButtonGradient: {
     width: 60,
     height: 60,
     borderRadius: 30,
+    overflow: 'hidden', // Important for gradient border radius
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  createGameButtonGradient: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

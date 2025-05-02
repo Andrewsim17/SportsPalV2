@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { 
@@ -16,107 +16,113 @@ import {
 import { colors } from '../../constants/colors';
 import CalendarPicker from '../../components/CalendarPicker';
 import TimeAvailabilityTable from '../../components/TimeAvailabilityTable';
+import SportsPalMap from '../../components/MapView';
+import { venuesApi } from '../../lib/api';
 
-const MOCK_VENUES = {
-  '1': {
-    id: '1',
-    name: 'Central Sports Complex',
-    images: [
-      'https://images.unsplash.com/photo-1544919982-b61976f0ba43?q=80&w=1000',
-      'https://images.unsplash.com/photo-1505666287802-931dc83a0fe4?q=80&w=1000',
-      'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1000'
-    ],
-    sports: ['Tennis', 'Basketball'],
-    rating: 4.8,
-    reviews: 128,
-    location: '123 Main Street, Downtown',
-    distance: '2.3 km',
-    pricePerHour: 45,
-    amenities: ['Parking', 'Showers', 'Equipment Rental', 'Cafe', 'Lockers'],
-    availability: 'Available today',
-    description: 'A modern sports complex featuring multiple tennis courts and basketball courts. Perfect for both casual play and organized events. All courts are well-maintained and include professional-grade equipment.',
-    hours: {
-      weekdays: '6:00 AM - 10:00 PM',
-      weekends: '8:00 AM - 8:00 PM'
-    },
-    courts: [
-      { id: 'c1', name: 'Tennis Court 1', sport: 'Tennis' },
-      { id: 'c2', name: 'Tennis Court 2', sport: 'Tennis' },
-      { id: 'c3', name: 'Basketball Court 1', sport: 'Basketball' },
-      { id: 'c4', name: 'Basketball Court 2', sport: 'Basketball' },
-    ]
-  },
-  '2': {
-    id: '2',
-    name: 'Elite Tennis Club',
-    images: [
-      'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?q=80&w=1000',
-      'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?q=80&w=1000',
-      'https://images.unsplash.com/photo-1551773188-0801da12ddae?q=80&w=1000'
-    ],
-    sports: ['Tennis'],
-    rating: 4.9,
-    reviews: 89,
-    location: '456 West Avenue, Westside',
-    distance: '4.1 km',
-    pricePerHour: 65,
-    amenities: ['Pro Shop', 'Cafe', 'Coaching', 'Locker Rooms', 'Parking'],
-    availability: '2 slots left today',
-    description: 'An exclusive tennis club with premium clay and hard courts. Membership options available, but courts can also be booked by non-members. Professional coaching staff available for lessons.',
-    hours: {
-      weekdays: '7:00 AM - 9:00 PM',
-      weekends: '8:00 AM - 7:00 PM'
-    },
-    courts: [
-      { id: 'c5', name: 'Clay Court 1', sport: 'Tennis' },
-      { id: 'c6', name: 'Clay Court 2', sport: 'Tennis' },
-      { id: 'c7', name: 'Hard Court 1', sport: 'Tennis' },
-      { id: 'c8', name: 'Hard Court 2', sport: 'Tennis' },
-    ]
-  },
-  '3': {
-    id: '3',
-    name: 'Badminton Paradise',
-    images: [
-      'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1000',
-      'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1000',
-      'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1000'
-    ],
-    sports: ['Badminton'],
-    rating: 4.7,
-    reviews: 56,
-    location: 'City Center, Shah Alam',
-    distance: '3.5 km',
-    pricePerHour: 35,
-    amenities: ['Equipment Rental', 'Cafe', 'Parking'],
-    availability: 'Available today',
-    description: 'A dedicated badminton facility with professional-grade courts. Perfect for both casual play and serious training.',
-    hours: {
-      weekdays: '7:00 AM - 11:00 PM',
-      weekends: '8:00 AM - 10:00 PM'
-    },
-    courts: [
-      { id: 'c9', name: 'Court A', sport: 'Badminton' },
-      { id: 'c10', name: 'Court B', sport: 'Badminton' },
-      { id: 'c11', name: 'Court C', sport: 'Badminton' },
-      { id: 'c12', name: 'Court D', sport: 'Badminton' },
-    ]
-  }
+// Helper function to format opening hours (optional)
+const formatOpeningHours = (hoursJson) => {
+  if (!hoursJson || typeof hoursJson !== 'object') return { weekdays: 'N/A', weekends: 'N/A' };
+  // Basic formatting, adjust as needed based on your JSON structure
+  const weekdays = hoursJson.monday || hoursJson.tuesday || 'N/A';
+  const weekends = hoursJson.saturday || hoursJson.sunday || 'N/A';
+  return { 
+    weekdays: weekdays !== 'N/A' ? `${weekdays.split('-')[0]} AM - ${weekdays.split('-')[1]} PM` : 'N/A',
+    weekends: weekends !== 'N/A' ? `${weekends.split('-')[0]} AM - ${weekends.split('-')[1]} PM` : 'N/A',
+  };
 };
 
 export default function VenueDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const venue = MOCK_VENUES[id];
+  
+  const [venue, setVenue] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState(null);
-  const [selectedSport, setSelectedSport] = useState(venue?.sports[0] || null);
+  const [selectedSport, setSelectedSport] = useState(null);
+  const [bookedSlots, setBookedSlots] = useState([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+
+  const fetchVenueDetails = useCallback(async () => {
+    if (!id) {
+      setError('Venue ID is missing');
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedVenue = await venuesApi.getVenue(id);
+      setVenue(fetchedVenue);
+      // Set default selected sport after venue data is fetched
+      if (fetchedVenue?.sports?.length > 0) {
+        setSelectedSport(fetchedVenue.sports[0]);
+      }
+    } catch (err) {
+      console.error(`Failed to fetch venue details for ID ${id}:`, err);
+      setError(err.message || 'Failed to load venue details');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id]);
+
+  const fetchAvailability = useCallback(async () => {
+    if (!venue?.id || !selectedSport || !selectedDate) {
+      setBookedSlots([]);
+      return;
+    }
+    setAvailabilityLoading(true);
+    console.log('Fetching availability for:', { venueId: venue.id, sport: selectedSport, date: selectedDate.toISOString().split('T')[0] });
+    try {
+      const fetchedBookings = await venuesApi.getVenueAvailability(venue.id, selectedSport, selectedDate);
+      setBookedSlots(fetchedBookings);
+      console.log('Fetched booked slots:', fetchedBookings.length);
+    } catch (err) {
+      console.error('Failed to fetch availability:', err);
+      setBookedSlots([]);
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  }, [venue?.id, selectedSport, selectedDate]);
+
+  useEffect(() => {
+    fetchVenueDetails();
+  }, [fetchVenueDetails]);
+
+  useEffect(() => {
+    if (venue) {
+      fetchAvailability();
+    }
+  }, [venue, selectedDate, selectedSport, fetchAvailability]);
+
+  // Handle loading state
+  if (isLoading) {
+    return (
+      <View style={styles.centeredContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  // Handle error state
+  if (error) {
+    return (
+      <View style={styles.centeredContainer}>
+        <Text style={styles.errorText}>Error: {error}</Text>
+        <Pressable onPress={fetchVenueDetails}>
+          <Text style={styles.backLink}>Try Again</Text>
+        </Pressable>
+      </View>
+    );
+  }
   
+  // Handle venue not found after fetch
   if (!venue) {
     return (
-      <View style={styles.notFound}>
+      <View style={styles.centeredContainer}> 
         <Text>Venue not found</Text>
         <Pressable onPress={() => router.back()}>
           <Text style={styles.backLink}>Go back</Text>
@@ -124,34 +130,48 @@ export default function VenueDetailScreen() {
       </View>
     );
   }
+  
+  // --- Adapt fetched data for display --- 
+  const displayVenue = {
+    ...venue, // Spread fetched data
+    images: venue.images && venue.images.length > 0 ? venue.images : ['https://via.placeholder.com/300/cccccc/ffffff?text=No+Image'],
+    location: `${venue.address || ''}, ${venue.city || ''}, ${venue.state || ''}`, // Combine address parts
+    hours: formatOpeningHours(venue.opening_hours), // Format hours
+    courts: venue?.courts || [], // Use fetched courts
+    // --- Placeholder/Default values for data not directly fetched by getVenue ---
+    rating: 4.5, // Placeholder - Needs separate review/rating fetch
+    reviews: Math.floor(Math.random() * 100), // Placeholder
+    distance: 'N/A', // Placeholder - Needs location calculation
+    pricePerHour: Math.floor(Math.random() * 50) + 20, // Placeholder - Needs pricing logic
+    availability: 'Check details', // Placeholder - Needs availability logic
+  };
+  // --- End data adaptation ---
 
-  const filteredCourts = venue.courts.filter(court => 
-    court.sport === selectedSport
+  // Filter courts based on selectedSport (using the *actual* courts now)
+  const filteredCourts = displayVenue.courts.filter(court => 
+    court.sport === selectedSport && court.status === 'active' // Also ensure court is active
   );
 
   const nextImage = () => {
-    setCurrentImageIndex((currentImageIndex + 1) % venue.images.length);
+    setCurrentImageIndex((currentImageIndex + 1) % displayVenue.images.length);
   };
 
   const prevImage = () => {
-    setCurrentImageIndex((currentImageIndex - 1 + venue.images.length) % venue.images.length);
+    setCurrentImageIndex((currentImageIndex - 1 + displayVenue.images.length) % displayVenue.images.length);
   };
 
   const handleBookNow = () => {
-    if (!selectedTime) {
-      Alert.alert('Select Time', 'Please select a time slot before booking.');
-      return;
-    }
-    
+    // ... uses displayVenue.id, displayVenue.name, displayVenue.pricePerHour ...
+    // Make sure router params use displayVenue values
     router.push({
       pathname: '/venue/payment',
       params: {
-        venueId: venue.id,
-        venueName: venue.name,
+        venueId: displayVenue.id,
+        venueName: displayVenue.name,
         date: selectedDate.toISOString(),
         time: selectedTime.toISOString(),
-        courtName: `All ${selectedSport} Courts`,
-        price: venue.pricePerHour * filteredCourts.length
+        courtName: `All ${selectedSport} Courts`, // This might need refinement
+        price: displayVenue.pricePerHour // Use placeholder price for now
       }
     });
   };
@@ -166,7 +186,7 @@ export default function VenueDetailScreen() {
 
       <View style={styles.imageContainer}>
         <Image
-          source={venue.images[currentImageIndex]}
+          source={displayVenue.images[currentImageIndex]}
           style={styles.image}
           contentFit="cover"
         />
@@ -179,40 +199,54 @@ export default function VenueDetailScreen() {
           <Pressable style={styles.imageNavButton} onPress={prevImage}>
             <ChevronLeft size={24} color={colors.card} />
           </Pressable>
+          
+          <Text style={styles.imageCounter}>{currentImageIndex + 1}/{displayVenue.images.length}</Text>
+          
           <Pressable style={styles.imageNavButton} onPress={nextImage}>
             <ChevronRight size={24} color={colors.card} />
           </Pressable>
         </View>
-        
-        <View style={styles.imageDots}>
-          {venue.images.map((_, index) => (
-            <View 
-              key={index} 
-              style={[
-                styles.imageDot,
-                index === currentImageIndex && styles.imageDotActive
-              ]} 
-            />
-          ))}
-        </View>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.detailsContainer}>
+        <Text style={styles.venueName}>{displayVenue.name}</Text>
+        
+        <View style={styles.infoItem}>
+          <MapPin size={16} color={colors.primary} />
+          <Text style={styles.infoText}>{displayVenue.location}</Text>
+        </View>
+        
+        {/* Location Map */}
+        {(displayVenue.latitude && displayVenue.longitude) ? (
+          <SportsPalMap
+            latitude={displayVenue.latitude}
+            longitude={displayVenue.longitude}
+            title={displayVenue.name}
+            description={displayVenue.address}
+            style={styles.map}
+          />
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <Info size={24} color={colors.textLight} />
+            <Text style={styles.mapPlaceholderText}>Map location not available</Text>
+          </View>
+        )}
+        
         <View style={styles.header}>
-          <Text style={styles.name}>{venue.name}</Text>
+          <Text style={styles.name}>{displayVenue.name}</Text>
           <View style={styles.ratingContainer}>
             <Star size={16} color={colors.primary} fill={colors.primary} />
-            <Text style={styles.rating}>{venue.rating} ({venue.reviews} reviews)</Text>
+            <Text style={styles.rating}>{displayVenue.rating} ({displayVenue.reviews} reviews)</Text>
           </View>
         </View>
 
         <View style={styles.locationContainer}>
           <MapPin size={16} color={colors.textLight} />
-          <Text style={styles.location}>{venue.location}</Text>
+          <Text style={styles.location}>{displayVenue.location}</Text>
         </View>
 
         <View style={styles.sportsContainer}>
-          {venue.sports.map((sport) => (
+          {displayVenue.sports.map((sport) => (
             <Pressable 
               key={sport} 
               style={[
@@ -236,7 +270,7 @@ export default function VenueDetailScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Description</Text>
-          <Text style={styles.description}>{venue.description}</Text>
+          <Text style={styles.description}>{displayVenue.description}</Text>
         </View>
 
         <View style={styles.section}>
@@ -244,11 +278,11 @@ export default function VenueDetailScreen() {
           <View style={styles.hoursContainer}>
             <View style={styles.hourItem}>
               <Text style={styles.hourLabel}>Weekdays:</Text>
-              <Text style={styles.hourValue}>{venue.hours.weekdays}</Text>
+              <Text style={styles.hourValue}>{displayVenue.hours.weekdays}</Text>
             </View>
             <View style={styles.hourItem}>
               <Text style={styles.hourLabel}>Weekends:</Text>
-              <Text style={styles.hourValue}>{venue.hours.weekends}</Text>
+              <Text style={styles.hourValue}>{displayVenue.hours.weekends}</Text>
             </View>
           </View>
         </View>
@@ -256,7 +290,7 @@ export default function VenueDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Amenities</Text>
           <View style={styles.amenitiesContainer}>
-            {venue.amenities.map((amenity) => (
+            {displayVenue.amenities.map((amenity) => (
               <View key={amenity} style={styles.amenityItem}>
                 <Check size={16} color={colors.success} />
                 <Text style={styles.amenityText}>{amenity}</Text>
@@ -267,21 +301,29 @@ export default function VenueDetailScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Book a Slot</Text>
-          <Text style={styles.bookingPrice}>${venue.pricePerHour} per hour per court</Text>
+          <Text style={styles.bookingPrice}>${displayVenue.pricePerHour} per hour per court</Text>
           
           <Text style={styles.dateLabel}>Select Date</Text>
           <CalendarPicker
             selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
+            onSelectDate={(date) => {
+              setSelectedDate(date);
+              setSelectedTime(null);
+            }}
           />
           
           <Text style={styles.dateLabel}>Select Time</Text>
-          <TimeAvailabilityTable 
-            onSelectTime={setSelectedTime} 
-            showAllCourts={true}
-            courts={filteredCourts}
-            sportType={selectedSport}
-          />
+          {availabilityLoading ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
+          ) : (
+            <TimeAvailabilityTable 
+              onSelectTime={setSelectedTime} 
+              courts={filteredCourts}
+              sportType={selectedSport}
+              bookedSlots={bookedSlots}
+              selectedDate={selectedDate}
+            />
+          )}
         </View>
       </ScrollView>
 
@@ -289,7 +331,7 @@ export default function VenueDetailScreen() {
         <View style={styles.priceContainer}>
           <Text style={styles.priceLabel}>Total</Text>
           <Text style={styles.price}>
-            ${venue.pricePerHour * filteredCourts.length}
+            ${displayVenue.pricePerHour * filteredCourts.length}
           </Text>
         </View>
         <Pressable 
@@ -347,26 +389,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  imageDots: {
-    position: 'absolute',
-    bottom: 16,
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
+  imageCounter: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.text,
+    marginHorizontal: 8,
   },
-  imageDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  imageDotActive: {
-    backgroundColor: colors.card,
-  },
-  content: {
+  detailsContainer: {
     flex: 1,
     padding: 16,
+  },
+  venueName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 16,
+  },
+  infoText: {
+    fontSize: 14,
+    color: colors.textLight,
   },
   header: {
     flexDirection: 'row',
@@ -522,13 +569,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  notFound: {
+  centeredContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 24,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 16,
   },
   backLink: {
+    fontSize: 16,
     color: colors.primary,
+    fontWeight: '600',
     marginTop: 8,
+  },
+  map: {
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  mapPlaceholder: {
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 16,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapPlaceholderText: {
+    fontSize: 14,
+    color: colors.textLight,
   },
 });

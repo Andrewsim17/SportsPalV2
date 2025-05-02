@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Share } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Share, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { 
@@ -16,200 +16,105 @@ import {
 import { colors } from '../../constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../store/auth-store';
-
-// Mock game data
-const MOCK_GAMES = {
-  '1': {
-    id: '1',
-    sport: 'Basketball',
-    title: '3v3 Basketball Tournament',
-    location: 'Downtown Sports Center',
-    address: '123 Main Street, Downtown',
-    date: '2024-02-25T14:00:00Z',
-    duration: 120,
-    playersNeeded: 6,
-    playersCurrent: 4,
-    level: 'Intermediate',
-    price: 10,
-    description: "Join our 3v3 basketball tournament! We need 2 more players to complete the teams. All skill levels welcome but some experience is preferred. We will play a round-robin format with the top teams advancing to playoffs.",
-    image: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1000',
-    organizer: {
-      id: 'user2',
-      name: 'Mike Chen',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200',
-      rating: 4.8,
-    },
-    participants: [
-      {
-        id: 'user2',
-        name: 'Mike Chen',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200',
-        isOrganizer: true,
-      },
-      {
-        id: 'user3',
-        name: 'Sarah Johnson',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-      },
-      {
-        id: 'user4',
-        name: 'David Kim',
-        avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200',
-      },
-      {
-        id: 'user5',
-        name: 'Emma Wilson',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-      }
-    ]
-  },
-  '2': {
-    id: '2',
-    sport: 'Tennis',
-    title: 'Casual Tennis Doubles',
-    location: 'Central Tennis Club',
-    address: '456 Park Avenue, Westside',
-    date: '2024-02-26T09:00:00Z',
-    duration: 90,
-    playersNeeded: 4,
-    playersCurrent: 2,
-    level: 'Beginner Friendly',
-    price: 15,
-    description: "Looking for 2 more players to join us for casual tennis doubles. No experience necessary, just bring a positive attitude! Court fees will be split among all players.",
-    image: 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?q=80&w=1000',
-    organizer: {
-      id: 'user3',
-      name: 'Sarah Johnson',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-      rating: 4.9,
-    },
-    participants: [
-      {
-        id: 'user3',
-        name: 'Sarah Johnson',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-        isOrganizer: true,
-      },
-      {
-        id: 'user6',
-        name: 'James Rodriguez',
-        avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=200',
-      }
-    ]
-  },
-  '3': {
-    id: '3',
-    sport: 'Basketball',
-    title: '3v3 Basketball Game',
-    location: 'Downtown Sports Center',
-    address: '123 Main Street, Downtown',
-    date: '2024-02-28T19:00:00Z',
-    duration: 60,
-    playersNeeded: 6,
-    playersCurrent: 4,
-    level: 'Intermediate',
-    price: 8,
-    description: "Great 3v3 game today! Scored 12 points with 5 assists and 8 rebounds. Our team chemistry is getting better with each game. Can't wait for the tournament next week!",
-    image: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1000',
-    organizer: {
-      id: 'user4',
-      name: 'Emma Wilson',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-      rating: 4.7,
-    },
-    participants: [
-      {
-        id: 'user4',
-        name: 'Emma Wilson',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-        isOrganizer: true,
-      },
-      {
-        id: 'user2',
-        name: 'Mike Chen',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200',
-      },
-      {
-        id: 'user3',
-        name: 'Sarah Johnson',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-      },
-      {
-        id: 'user5',
-        name: 'David Kim',
-        avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200',
-      }
-    ]
-  }
-};
+import { gamesApi } from '../../lib/api';
 
 export default function GameDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id: gameId } = useLocalSearchParams();
   const router = useRouter();
   const { user } = useAuthStore();
-  const game = MOCK_GAMES[id];
   
+  const [game, setGame] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [isJoined, setIsJoined] = useState(false);
-  
-  if (!game) {
-    return (
-      <View style={styles.notFound}>
-        <Text>Game not found</Text>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.backLink}>Go back</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const [isJoiningOrLeaving, setIsJoiningOrLeaving] = useState(false);
 
-  const isGameFull = game.playersCurrent >= game.playersNeeded;
-  const spotsLeft = game.playersNeeded - game.playersCurrent;
-  const isOrganizer = user && user.id === game.organizer.id;
-  
-  const handleJoinGame = () => {
-    if (isGameFull) {
-      Alert.alert('Game Full', 'This game is already at capacity.');
+  const fetchGameDetails = useCallback(async () => {
+    if (!gameId) return;
+    console.log(`Fetching details for game ID: ${gameId}`);
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedGame = await gamesApi.getGame(gameId);
+      console.log("Fetched game details:", fetchedGame);
+      
+      const adaptedGame = {
+        ...fetchedGame,
+        playersCurrent: fetchedGame.participants?.length || 0,
+        organizer: fetchedGame.organizer ? {
+          id: fetchedGame.organizer.id,
+          name: fetchedGame.organizer.name || 'Unknown Organizer',
+          avatar: fetchedGame.organizer.avatar_url || 'https://ui-avatars.com/api/?name=U&background=6C5CE7&color=fff',
+          rating: 4.5,
+        } : null,
+        participants: fetchedGame.participants?.map(p => ({
+            id: p.player?.id,
+            name: p.player?.name || 'Unknown Player',
+            avatar: p.player?.avatar_url || 'https://ui-avatars.com/api/?name=P&background=cccccc&color=fff',
+            isOrganizer: p.player?.id === fetchedGame.organizer?.id,
+            status: p.status
+        })) || []
+      };
+      
+      setGame(adaptedGame);
+      
+      if (user && adaptedGame.participants.some(p => p.id === user.id)) {
+        setIsJoined(true);
+      }
+
+    } catch (err) {
+      console.error("Failed to fetch game details:", err);
+      setError(err.message || 'Failed to load game details.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [gameId, user]);
+
+  useEffect(() => {
+    fetchGameDetails();
+  }, [fetchGameDetails]);
+
+  const handleJoinLeaveGame = async () => {
+    if (!user) {
+      Alert.alert('Login Required', 'You need to be logged in to join or leave games.');
+      router.push('/auth/login');
       return;
     }
-    
-    if (isJoined) {
+    if (!game) return;
+
+    const action = isJoined ? 'Leave' : 'Join';
+    const apiCall = isJoined ? gamesApi.leaveGame : gamesApi.joinGame;
+    const confirmationMessage = isJoined 
+      ? 'Are you sure you want to leave this game?' 
+      : 'By joining this game, you commit to attend. Cancellations may affect your rating. Do you want to proceed?';
+
       Alert.alert(
-        'Leave Game',
-        'Are you sure you want to leave this game?',
+      `Confirm ${action}`,
+      confirmationMessage,
         [
+        { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Leave',
-            style: 'destructive',
-            onPress: () => {
-              setIsJoined(false);
-              Alert.alert('Success', 'You have left the game.');
+          text: action,
+          style: isJoined ? 'destructive' : 'default',
+          onPress: async () => {
+            setIsJoiningOrLeaving(true);
+            setError(null);
+            try {
+              await apiCall(game.id, user.id);
+              Alert.alert('Success', `You have ${isJoined ? 'left' : 'joined'} the game!`);
+              setIsJoined(!isJoined);
+              fetchGameDetails(); 
+            } catch (err) {
+              console.error(`Failed to ${action.toLowerCase()} game:`, err);
+              Alert.alert('Error', err.message || `Could not ${action.toLowerCase()} the game.`);
+              setError(err.message);
+            } finally {
+              setIsJoiningOrLeaving(false);
+            }
             },
           },
         ]
       );
-    } else {
-      Alert.alert(
-        'Join Game',
-        'By joining this game, you are making a commitment to attend. Cancellations may affect your user rating. Do you want to proceed?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Join',
-            onPress: () => {
-              setIsJoined(true);
-              Alert.alert('Success', 'You have joined the game!');
-            },
-          },
-        ]
-      );
-    }
   };
   
   const handleMessageOrganizer = () => {
@@ -237,6 +142,40 @@ export default function GameDetailScreen() {
     const date = new Date(dateString);
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
+
+  if (isLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>Error: {error}</Text>
+        <Pressable onPress={fetchGameDetails}>
+          <Text style={styles.retryText}>Try Again</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  
+  if (!game) {
+    return (
+      <View style={styles.centered}>
+        <Text>Game not found</Text>
+        <Pressable onPress={() => router.back()}>
+          <Text style={styles.retryText}>Go back</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  
+  const isGameFull = game.playersCurrent >= game.playersNeeded;
+  const spotsLeft = game.playersNeeded - game.playersCurrent;
+  const isOrganizer = user && game.organizer && user.id === game.organizer.id;
 
   return (
     <View style={styles.container}>
@@ -303,7 +242,7 @@ export default function GameDetailScreen() {
             </View>
             <View style={styles.detailItem}>
               <MapPin size={20} color={colors.primary} />
-              <Text style={styles.detailText}>{game.location}</Text>
+              <Text style={styles.detailText}>{game.location} {game.address ? `(${game.address})` : ''}</Text>
             </View>
             <View style={styles.detailItem}>
               <Users size={20} color={colors.primary} />
@@ -351,12 +290,13 @@ export default function GameDetailScreen() {
                   )}
                 </View>
               ))}
-              {Array(spotsLeft).fill().map((_, index) => (
+              {/* Temporarily commented out empty spot rendering for debugging */}
+              {/* {Array(spotsLeft).fill().map((_, index) => (
                 <View key={`empty-${index}`} style={styles.emptyParticipant}>
                   <Users size={24} color={colors.textLight} />
                   <Text style={styles.emptyParticipantText}>Open Spot</Text>
                 </View>
-              ))}
+              ))} */}
             </View>
           </View>
         </View>
@@ -369,18 +309,19 @@ export default function GameDetailScreen() {
         <Pressable 
           style={[
             styles.joinButton,
-            (isGameFull && !isJoined) && styles.joinButtonDisabled,
-            isJoined && styles.leaveButton
+            isJoined ? styles.leaveButton : (isGameFull ? styles.fullButton : {}),
+            isJoiningOrLeaving && styles.disabledButton
           ]}
-          onPress={handleJoinGame}
-          disabled={isGameFull && !isJoined}
+          onPress={handleJoinLeaveGame}
+          disabled={isGameFull && !isJoined || isJoiningOrLeaving}
         >
-          <Text style={[
-            styles.joinButtonText,
-            isJoined && styles.leaveButtonText
-          ]}>
-            {isJoined ? 'Leave Game' : isGameFull ? 'Game Full' : 'Join Game'}
+          {isJoiningOrLeaving ? (
+            <ActivityIndicator color={colors.card} />
+          ) : (
+            <Text style={styles.joinButtonText}>
+              {isJoined ? 'Leave Game' : isGameFull ? 'Game Full' : `Join (${spotsLeft} spots left)`}
           </Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -618,27 +559,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  joinButtonDisabled: {
-    backgroundColor: colors.inactive,
-  },
   leaveButton: {
     backgroundColor: colors.danger,
+  },
+  fullButton: {
+    backgroundColor: colors.inactive,
   },
   joinButtonText: {
     color: colors.card,
     fontSize: 16,
     fontWeight: '600',
   },
-  leaveButtonText: {
-    color: colors.card,
+  disabledButton: {
+    opacity: 0.6,
   },
-  notFound: {
+  centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 24,
+    backgroundColor: colors.background,
   },
-  backLink: {
+  errorText: {
+    fontSize: 16,
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryText: {
+    fontSize: 16,
     color: colors.primary,
-    marginTop: 8,
+    fontWeight: '600',
   },
 });

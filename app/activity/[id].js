@@ -1,258 +1,220 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
-import { ArrowLeft, Heart, MessageCircle, Share2, MapPin, Clock, Activity, Send } from 'lucide-react-native';
-import { colors } from '../../constants/colors';
-
-// Mock activity data
-const MOCK_ACTIVITIES = {
-  '1': {
-    id: '1',
-    userId: 'user1',
-    userName: 'Sarah Johnson',
-    userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-    sport: 'running',
-    title: 'Morning Run',
-    description: 'Beautiful sunrise run along the river. Perfect way to start the day!',
-    stats: {
-      distance: 5.2,
-      pace: '5:30',
-      elevation: 125,
-      duration: 28,
-      calories: 320,
-      heartRate: 145,
-    },
-    date: '2024-02-20T08:00:00Z',
-    kudos: 12,
-    comments: 3,
-    image: 'https://images.unsplash.com/photo-1502904550040-7534597429ae?q=80&w=1000',
-    liked: false,
-    location: 'Riverside Park',
-  },
-  '2': {
-    id: '2',
-    userId: 'user2',
-    userName: 'Mike Chen',
-    userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200',
-    sport: 'cycling',
-    title: 'Weekend Ride',
-    description: 'Challenging hill climbs today but the views were worth it! Made it to the summit in record time.',
-    stats: {
-      distance: 25.8,
-      pace: '18km/h',
-      elevation: 350,
-      duration: 86,
-      calories: 750,
-      heartRate: 155,
-    },
-    date: '2024-02-20T10:00:00Z',
-    kudos: 18,
-    comments: 5,
-    image: 'https://images.unsplash.com/photo-1541625602330-2277a4c46182?q=80&w=1000',
-    liked: true,
-    location: 'Mountain Pass',
-  },
-  '3': {
-    id: '3',
-    userId: 'user3',
-    userName: 'David Lee',
-    userAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200',
-    sport: 'badminton',
-    title: 'Badminton Session',
-    description: 'Had an amazing badminton session today! Played 5 matches and won 3. My smash technique is definitely improving. Looking forward to the next session!',
-    stats: {
-      duration: 90,
-      matches: 5,
-      wins: 3,
-      opponents: 'Alex & Sarah',
-      location: 'Elite Sports Hall',
-    },
-    date: '2024-02-19T18:30:00Z',
-    kudos: 9,
-    comments: 2,
-    image: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1000',
-    liked: false,
-    location: 'Elite Sports Center',
-  },
-  '4': {
-    id: '4',
-    userId: 'user4',
-    userName: 'Emma Wilson',
-    userAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-    sport: 'basketball',
-    title: '3v3 Basketball Game',
-    description: 'Great 3v3 game today! Scored 12 points with 5 assists and 8 rebounds. Our team chemistry is getting better with each game. Can\'t wait for the tournament next week!',
-    stats: {
-      duration: 60,
-      points: 12,
-      assists: 5,
-      rebounds: 8,
-      team: 'Wildcats',
-      location: 'Downtown Sports Center',
-    },
-    date: '2024-02-18T19:00:00Z',
-    kudos: 15,
-    comments: 4,
-    image: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1000',
-    liked: true,
-    location: 'Downtown Sports Center',
-  },
-};
-
-// Mock comments
-const MOCK_COMMENTS = {
-  '1': [
-    {
-      id: '1',
-      userId: 'user2',
-      userName: 'Mike Chen',
-      userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200',
-      text: 'Great pace! Which route did you take?',
-      time: '2 hours ago'
-    },
-    {
-      id: '2',
-      userId: 'user3',
-      userName: 'David Lee',
-      userAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200',
-      text: 'The sunrise looks amazing! I need to try morning runs.',
-      time: '1 day ago'
-    }
-  ],
-  '2': [
-    {
-      id: '1',
-      userId: 'user1',
-      userName: 'Sarah Johnson',
-      userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-      text: 'That elevation gain is impressive!',
-      time: '3 hours ago'
-    },
-    {
-      id: '2',
-      userId: 'user3',
-      userName: 'David Lee',
-      userAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200',
-      text: "Nice stats! You're killing it on the road!",
-      time: '1 day ago'
-    }
-  ],
-  '3': [
-    {
-      id: '1',
-      userId: 'user4',
-      userName: 'Emma Wilson',
-      userAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-      text: 'Your smash technique has definitely improved!',
-      time: '5 hours ago'
-    }
-  ],
-  '4': [
-    {
-      id: '1',
-      userId: 'user1',
-      userName: 'Sarah Johnson',
-      userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-      text: 'Great stats! Those assists are impressive.',
-      time: '6 hours ago'
-    },
-    {
-      id: '2',
-      userId: 'user2',
-      userName: 'Mike Chen',
-      userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200',
-      text: 'Looking forward to watching your tournament!',
-      time: '1 day ago'
-    }
-  ]
-};
+import { ArrowLeft, Heart, MessageCircle, Share2, MapPin, Clock, Activity as ActivityIcon, Send, AlertCircle, Mountain } from 'lucide-react-native';
+import { colors } from '@/constants/colors';
+import { activitiesApi } from '../../lib/api';
+import { useAuthStore } from '../../store/auth-store';
 
 export default function ActivityDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
-  const [activity, setActivity] = useState(MOCK_ACTIVITIES[id]);
-  const [comments, setComments] = useState(MOCK_COMMENTS[id] || []);
+  const { id: activityId } = useLocalSearchParams();
+  const { user } = useAuthStore();
+
+  const [activity, setActivity] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [newComment, setNewComment] = useState('');
+  const [isLiking, setIsLiking] = useState(false);
+  const [isCommenting, setIsCommenting] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
 
-  if (!activity) {
-    return (
-      <View style={styles.container}>
-        <Text>Activity not found</Text>
-      </View>
-    );
-  }
+  const fetchActivityDetails = useCallback(async () => {
+    if (!activityId) {
+      setError("Activity ID not provided.");
+      setIsLoading(false);
+      return;
+    }
+    console.log(`Fetching details for activity ID: ${activityId}`);
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedActivity = await activitiesApi.getActivity(activityId);
+      console.log("Fetched activity details:", fetchedActivity);
 
-  const handleToggleLike = () => {
-    setActivity({
-      ...activity,
-      liked: !activity.liked,
-      kudos: activity.liked ? activity.kudos - 1 : activity.kudos + 1
+      if (!fetchedActivity) {
+        throw new Error("Activity not found.");
+      }
+
+      setActivity(fetchedActivity);
+
+      const adaptedComments = fetchedActivity.comments?.map(c => ({
+        id: c.id,
+        userId: c.user?.id,
+        userName: c.user?.name || 'Unknown User',
+        userAvatar: c.user?.avatar_url || `https://ui-avatars.com/api/?name=${c.user?.name?.charAt(0) || 'U'}&background=cccccc&color=fff`,
+        text: c.content,
+        time: c.created_at,
+      })) || [];
+      setComments(adaptedComments);
+
+      if (user && fetchedActivity.likes?.some(like => like.user_id === user.id)) {
+        setIsLiked(true);
+      } else {
+        setIsLiked(false);
+      }
+
+    } catch (err) {
+      console.error("Failed to fetch activity details:", err);
+      setError(err.message || 'Failed to load activity details.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activityId, user]);
+
+  useEffect(() => {
+    fetchActivityDetails();
+  }, [fetchActivityDetails]);
+
+  const handleToggleLike = async () => {
+    if (!user || isLiking || !activity) return;
+
+    setIsLiking(true);
+    const currentlyLiked = isLiked;
+    const originalLikes = activity.likes || [];
+    
+    setIsLiked(!currentlyLiked);
+    setActivity(prev => {
+      if (!prev) return null;
+      const currentLikeCount = prev.likes?.length || 0;
+      return {
+        ...prev,
+        likes: !currentlyLiked
+          ? [...originalLikes, { user_id: user.id }]
+          : originalLikes.filter(like => like.user_id !== user.id),
+      };
     });
+
+    try {
+      if (currentlyLiked) {
+        await activitiesApi.unlikeActivity(activity.id, user.id);
+        console.log('Activity unliked');
+      } else {
+        await activitiesApi.likeActivity(activity.id, user.id);
+        console.log('Activity liked');
+      }
+      fetchActivityDetails();
+    } catch (err) {
+      console.error("Failed to toggle like:", err);
+      setIsLiked(currentlyLiked);
+      setActivity(prev => ({ ...prev, likes: originalLikes }));
+      Alert.alert('Error', 'Could not update like status.');
+    } finally {
+      setIsLiking(false);
+    }
   };
 
-  const handleAddComment = () => {
-    if (!newComment.trim()) return;
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !user || !activity || isCommenting) return;
 
-    const newCommentObj = {
-      id: `new-${Date.now()}`,
-      userId: 'currentUser',
-      userName: 'You',
-      userAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=200',
-      text: newComment,
-      time: 'Just now'
-    };
-
-    setComments([...comments, newCommentObj]);
-    setActivity({
-      ...activity,
-      comments: activity.comments + 1
-    });
+    setIsCommenting(true);
+    const commentContent = newComment;
     setNewComment('');
+
+    const tempComment = {
+      id: `temp-${Date.now()}`,
+      userId: user.id,
+      userName: user.name || 'You',
+      userAvatar: user.avatar_url || `https://ui-avatars.com/api/?name=Y&background=${colors.primary.substring(1)}&color=fff`,
+      text: commentContent,
+      time: new Date().toISOString(),
+      isTemporary: true
+    };
+    setComments(prev => [...prev, tempComment]);
+
+    try {
+      const savedComment = await activitiesApi.addCommentToActivity(activity.id, user.id, commentContent);
+      console.log('Comment added:', savedComment);
+
+      setComments(prev => prev.map(c => 
+        c.id === tempComment.id ? { 
+           id: savedComment.id,
+           userId: savedComment.user?.id,
+           userName: savedComment.user?.name || 'Unknown User',
+           userAvatar: savedComment.user?.avatar_url || `https://ui-avatars.com/api/?name=${savedComment.user?.name?.charAt(0) || 'U'}&background=cccccc&color=fff`,
+           text: savedComment.content,
+           time: savedComment.created_at,
+        } : c
+      ));
+    } catch (err) {
+      console.error("Failed to add comment:", err);
+      Alert.alert('Error', 'Could not post comment.');
+      setComments(prev => prev.filter(c => c.id !== tempComment.id));
+    } finally {
+      setIsCommenting(false);
+    }
+  };
+
+  const formatTimeAgo = (dateString) => {
+     if (!dateString) return '';
+     try {
+        const date = new Date(dateString);
+        const seconds = Math.floor((new Date() - date) / 1000);
+        let interval = seconds / 31536000;
+        if (interval > 1) return Math.floor(interval) + "y ago";
+        interval = seconds / 2592000;
+        if (interval > 1) return Math.floor(interval) + "mo ago";
+        interval = seconds / 86400;
+        if (interval > 1) return Math.floor(interval) + "d ago";
+        interval = seconds / 3600;
+        if (interval > 1) return Math.floor(interval) + "h ago";
+        interval = seconds / 60;
+        if (interval > 1) return Math.floor(interval) + "m ago";
+        return Math.floor(seconds) + "s ago";
+     } catch (e) {
+        return 'Just now';
+     }
   };
 
   const renderStats = () => {
-    if (activity.sport === 'badminton') {
+    const details = activity?.details;
+    const sport = activity?.sport;
+
+    if (!activity) return null;
+
+    if (sport === 'badminton') {
       return (
         <>
           <View style={styles.statItem}>
             <Clock size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.duration} min</Text>
+            <Text style={styles.statValue}>{details?.duration_min?.toFixed(0) || 'N/A'} min</Text>
             <Text style={styles.statLabel}>Duration</Text>
           </View>
           <View style={styles.statItem}>
-            <Activity size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.matches}</Text>
+            <ActivityIcon size={20} color={colors.primary} />
+            <Text style={styles.statValue}>{details?.matches || 'N/A'}</Text>
             <Text style={styles.statLabel}>Matches</Text>
           </View>
           <View style={styles.statItem}>
-            <Activity size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.wins}</Text>
+            <ActivityIcon size={20} color={colors.primary} />
+            <Text style={styles.statValue}>{details?.wins || 'N/A'}</Text>
             <Text style={styles.statLabel}>Wins</Text>
           </View>
         </>
       );
-    } else if (activity.sport === 'basketball') {
+    } else if (sport === 'basketball') {
       return (
         <>
           <View style={styles.statItem}>
             <Clock size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.duration} min</Text>
+            <Text style={styles.statValue}>{details?.duration_min?.toFixed(0) || 'N/A'} min</Text>
             <Text style={styles.statLabel}>Duration</Text>
           </View>
           <View style={styles.statItem}>
-            <Activity size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.points}</Text>
+            <ActivityIcon size={20} color={colors.primary} />
+            <Text style={styles.statValue}>{details?.points || 'N/A'}</Text>
             <Text style={styles.statLabel}>Points</Text>
           </View>
           <View style={styles.statItem}>
-            <Activity size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.assists}</Text>
+            <ActivityIcon size={20} color={colors.primary} />
+            <Text style={styles.statValue}>{details?.assists || 'N/A'}</Text>
             <Text style={styles.statLabel}>Assists</Text>
           </View>
           <View style={styles.statItem}>
-            <Activity size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.rebounds}</Text>
+            <ActivityIcon size={20} color={colors.primary} />
+            <Text style={styles.statValue}>{details?.rebounds || 'N/A'}</Text>
             <Text style={styles.statLabel}>Rebounds</Text>
           </View>
         </>
@@ -262,28 +224,56 @@ export default function ActivityDetailScreen() {
         <>
           <View style={styles.statItem}>
             <MapPin size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.distance} km</Text>
+            <Text style={styles.statValue}>{details?.distance_km?.toFixed(2) || 'N/A'} km</Text>
             <Text style={styles.statLabel}>Distance</Text>
           </View>
           <View style={styles.statItem}>
             <Clock size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.duration} min</Text>
+            <Text style={styles.statValue}>{details?.duration_min?.toFixed(0) || 'N/A'} min</Text>
             <Text style={styles.statLabel}>Duration</Text>
           </View>
           <View style={styles.statItem}>
-            <Activity size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.pace}</Text>
+            <ActivityIcon size={20} color={colors.primary} />
+            <Text style={styles.statValue}>{details?.pace_min_km || 'N/A'} /km</Text>
             <Text style={styles.statLabel}>Pace</Text>
           </View>
           <View style={styles.statItem}>
-            <Activity size={20} color={colors.primary} />
-            <Text style={styles.statValue}>{activity.stats.elevation} m</Text>
+            <Mountain size={20} color={colors.primary} />
+            <Text style={styles.statValue}>{details?.elevation_m || 'N/A'} m</Text>
             <Text style={styles.statLabel}>Elevation</Text>
           </View>
         </>
       );
     }
   };
+
+  if (isLoading) {
+    return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <AlertCircle size={40} color={colors.danger} />
+        <Text style={styles.errorText}>Error loading activity:</Text>
+        <Text style={styles.errorDetails}>{error}</Text>
+        <Pressable onPress={fetchActivityDetails} style={styles.retryButton}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  
+  if (!activity) {
+     return (
+      <View style={styles.errorContainer}>
+         <Text style={styles.errorText}>Activity not found.</Text>
+      </View>
+     );
+  }
+
+  const likeCount = activity.likes?.length || 0;
+  const commentCount = comments.length;
 
   return (
     <View style={styles.container}>
@@ -302,7 +292,7 @@ export default function ActivityDetailScreen() {
 
       <ScrollView style={styles.scrollView}>
         <Image
-          source={activity.image}
+          source={activity.details?.image_url || 'https://via.placeholder.com/600x400.png?text=Activity'}
           style={styles.coverImage}
           contentFit="cover"
         />
@@ -310,26 +300,28 @@ export default function ActivityDetailScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <Image
-              source={activity.userAvatar}
+              source={activity.user?.avatar_url || `https://ui-avatars.com/api/?name=${activity.user?.name?.charAt(0) || 'U'}&background=6C5CE7&color=fff`}
               style={styles.avatar}
               contentFit="cover"
             />
             <View style={styles.headerText}>
-              <Text style={styles.userName}>{activity.userName}</Text>
-              <Text style={styles.activityDate}>2 hours ago • {activity.sport}</Text>
+              <Text style={styles.userName}>{activity.user?.name || 'Unknown User'}</Text>
+              <Text style={styles.activityDate}>{formatTimeAgo(activity.created_at)} • {activity.sport || activity.type}</Text>
             </View>
           </View>
 
-          <Text style={styles.title}>{activity.title}</Text>
+          <Text style={styles.title}>{activity.content}</Text>
 
-          {activity.description ? (
-            <Text style={styles.description}>{activity.description}</Text>
+          {activity.details?.description ? (
+            <Text style={styles.description}>{activity.details.description}</Text>
           ) : null}
 
+          {activity.details?.location_name && (
           <View style={styles.locationContainer}>
             <MapPin size={16} color={colors.textLight} />
-            <Text style={styles.locationText}>{activity.location}</Text>
+              <Text style={styles.locationText}>{activity.details.location_name}</Text>
           </View>
+          )}
 
           <View style={styles.statsContainer}>
             {renderStats()}
@@ -337,20 +329,21 @@ export default function ActivityDetailScreen() {
 
           <View style={styles.actionsContainer}>
             <Pressable 
-              style={styles.actionButton}
+              style={[styles.actionButton, isLiking && styles.disabledButton]}
               onPress={handleToggleLike}
+              disabled={isLiking || !user}
             >
               <Heart 
                 size={24} 
-                color={activity.liked ? colors.danger : colors.text}
-                fill={activity.liked ? colors.danger : 'none'}
+                color={isLiked ? colors.danger : colors.text}
+                fill={isLiked ? colors.danger : 'none'}
               />
-              <Text style={styles.actionText}>{activity.kudos} Likes</Text>
+              <Text style={styles.actionText}>{likeCount} Likes</Text>
             </Pressable>
 
             <Pressable style={styles.actionButton}>
               <MessageCircle size={24} color={colors.text} />
-              <Text style={styles.actionText}>{activity.comments} Comments</Text>
+              <Text style={styles.actionText}>{commentCount} Comments</Text>
             </Pressable>
 
             <Pressable style={styles.actionButton}>
@@ -372,31 +365,41 @@ export default function ActivityDetailScreen() {
                 <View style={styles.commentContent}>
                   <View style={styles.commentHeader}>
                     <Text style={styles.commentUserName}>{comment.userName}</Text>
-                    <Text style={styles.commentTime}>{comment.time}</Text>
+                    <Text style={styles.commentTime}>{formatTimeAgo(comment.time)}</Text>
                   </View>
                   <Text style={styles.commentText}>{comment.text}</Text>
                 </View>
               </View>
             ))}
+            {commentCount === 0 && (
+               <Text style={styles.noCommentsText}>Be the first to comment!</Text>
+            )}
           </View>
         </View>
       </ScrollView>
 
+      {user && (
       <View style={styles.commentInputContainer}>
         <TextInput
           style={styles.commentInput}
           placeholder="Add a comment..."
+             placeholderTextColor={colors.textLight}
           value={newComment}
           onChangeText={setNewComment}
           multiline
         />
         <Pressable 
-          style={styles.sendButton}
+             style={[styles.sendButton, (!newComment.trim() || isCommenting) && styles.sendButtonDisabled]}
           onPress={handleAddComment}
+             disabled={!newComment.trim() || isCommenting}
         >
+             {isCommenting ? 
+               <ActivityIndicator size="small" color={colors.card} /> : 
           <Send size={20} color={colors.card} />
+             }
         </Pressable>
       </View>
+      )}
     </View>
   );
 }
@@ -406,6 +409,44 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: colors.background,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.danger,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  errorDetails: {
+    fontSize: 14,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 24,
+  },
+  retryButton: {
+     backgroundColor: colors.primary,
+     paddingVertical: 10,
+     paddingHorizontal: 20,
+     borderRadius: 8,
+  },
+  retryButtonText: {
+     color: colors.card,
+     fontSize: 16,
+     fontWeight: '600',
+  },
   backButton: {
     width: 40,
     height: 40,
@@ -413,6 +454,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 20,
+    left: 16,
+    zIndex: 10,
   },
   scrollView: {
     flex: 1,
@@ -454,6 +499,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textLight,
     marginTop: 2,
+    textTransform: 'capitalize',
   },
   title: {
     fontSize: 24,
@@ -482,13 +528,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     marginBottom: 16,
   },
   statItem: {
     width: '50%',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingVertical: 8,
   },
   statValue: {
     fontSize: 18,
@@ -499,6 +546,7 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: colors.textLight,
+    marginTop: 2,
   },
   actionsContainer: {
     flexDirection: 'row',
@@ -563,6 +611,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 20,
   },
+   noCommentsText: {
+    color: colors.textLight,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
   commentInputContainer: {
     position: 'absolute',
     bottom: 0,
@@ -573,14 +626,16 @@ const styles = StyleSheet.create({
     padding: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    alignItems: 'center',
   },
   commentInput: {
     flex: 1,
     backgroundColor: colors.background,
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     maxHeight: 100,
+    marginRight: 8,
     fontSize: 16,
     color: colors.text,
   },
@@ -591,6 +646,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: colors.primaryLight,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 });

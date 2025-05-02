@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, TextInput } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Search, Filter, MapPin, Award, Star } from 'lucide-react-native';
+import { Search, Filter, MapPin, Award, Star, AlertCircle } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
+import { communitiesApi, profilesApi, gamesApi } from '../../lib/api';
+import { useAuthStore } from '../../store/auth-store';
 
 const CATEGORIES = [
   { id: 'communities', name: 'Communities' },
@@ -12,114 +14,25 @@ const CATEGORIES = [
   { id: 'events', name: 'Events' },
 ];
 
-const MOCK_COMMUNITIES = [
-  {
-    id: 'c1',
-    name: 'Badminton Enthusiasts',
-    members: 1245,
-    image: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1000',
-    location: 'Kuala Lumpur',
-    description: 'A community for badminton players of all levels to connect and play together.',
-  },
-  {
-    id: 'c2',
-    name: 'Basketball League',
-    members: 876,
-    image: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1000',
-    location: 'Petaling Jaya',
-    description: 'Join our basketball league for competitive play and tournaments.',
-  },
-  {
-    id: 'c3',
-    name: 'Tennis Club',
-    members: 543,
-    image: 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?q=80&w=1000',
-    location: 'Shah Alam',
-    description: 'A club for tennis enthusiasts to practice, play matches, and improve skills.',
-  },
-];
-
-const MOCK_COACHES = [
-  {
-    id: 'coach1',
-    name: 'Alex Wong',
-    sport: 'Badminton',
-    rating: 4.9,
-    reviews: 124,
-    image: 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?q=80&w=200',
-    location: 'Kuala Lumpur',
-    experience: '10+ years',
-    price: '$50/hour',
-  },
-  {
-    id: 'coach2',
-    name: 'Sarah Chen',
-    sport: 'Tennis',
-    rating: 4.8,
-    reviews: 98,
-    image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200',
-    location: 'Petaling Jaya',
-    experience: '8 years',
-    price: '$45/hour',
-  },
-  {
-    id: 'coach3',
-    name: 'Michael Lee',
-    sport: 'Basketball',
-    rating: 4.7,
-    reviews: 76,
-    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200',
-    location: 'Shah Alam',
-    experience: '12 years',
-    price: '$55/hour',
-  },
-];
-
-const MOCK_PLAYERS = [
-  {
-    id: 'player1',
-    name: 'Jason Tan',
-    sports: ['Basketball', 'Volleyball'],
-    level: 'Advanced',
-    image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200',
-    location: 'Kuala Lumpur',
-    availability: 'Weekends',
-  },
-  {
-    id: 'player2',
-    name: 'Emily Wong',
-    sports: ['Tennis', 'Badminton'],
-    level: 'Intermediate',
-    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-    location: 'Petaling Jaya',
-    availability: 'Evenings',
-  },
-  {
-    id: 'player3',
-    name: 'David Lim',
-    sports: ['Football', 'Running'],
-    level: 'Beginner',
-    image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=200',
-    location: 'Shah Alam',
-    availability: 'Weekdays',
-  },
-];
-
 function CommunityCard({ community, onPress }) {
   return (
-    <Pressable style={styles.communityCard} onPress={onPress}>
-      <Image source={community.image} style={styles.communityImage} contentFit="cover" />
+    <Pressable style={styles.communityCard} onPress={() => onPress(community.id)}>
+      <Image 
+        source={community.image || 'https://via.placeholder.com/300x200.png?text=Community'}
+        style={styles.communityImage} 
+        contentFit="cover" 
+      />
       <View style={styles.communityContent}>
-        <Text style={styles.communityName}>{community.name}</Text>
+        <Text style={styles.communityName}>{community.name || 'Community Name'}</Text>
         <View style={styles.communityMeta}>
-          <Text style={styles.communityMembers}>{community.members} members</Text>
+          <Text style={styles.communityMembers}>{community.members ?? '0'} members</Text>
           <View style={styles.locationContainer}>
             <MapPin size={14} color={colors.textLight} />
-            <Text style={styles.locationText}>{community.location}</Text>
+            <Text style={styles.locationText}>{community.location || 'Location N/A'}</Text>
           </View>
         </View>
         <Text style={styles.communityDescription} numberOfLines={2}>
-          {community.description}
+          {community.description || 'No description available.'}
         </Text>
       </View>
     </Pressable>
@@ -128,26 +41,30 @@ function CommunityCard({ community, onPress }) {
 
 function CoachCard({ coach, onPress }) {
   return (
-    <Pressable style={styles.coachCard} onPress={onPress}>
-      <Image source={coach.image} style={styles.coachImage} contentFit="cover" />
+    <Pressable style={styles.coachCard} onPress={() => onPress(coach.id)}>
+      <Image 
+        source={coach.image || 'https://via.placeholder.com/150x150.png?text=Coach'}
+        style={styles.coachImage} 
+        contentFit="cover" 
+      />
       <View style={styles.coachContent}>
-        <Text style={styles.coachName}>{coach.name}</Text>
-        <Text style={styles.coachSport}>{coach.sport} Coach</Text>
+        <Text style={styles.coachName}>{coach.name || 'Coach Name'}</Text>
+        <Text style={styles.coachSport}>{coach.sport || 'Sport N/A'} Coach</Text>
         
         <View style={styles.coachMeta}>
           <View style={styles.ratingContainer}>
             <Star size={14} color={colors.primary} fill={colors.primary} />
-            <Text style={styles.ratingText}>{coach.rating} ({coach.reviews})</Text>
+            <Text style={styles.ratingText}>{coach.rating || 'N/A'} ({coach.reviews || '0'})</Text>
           </View>
           <View style={styles.locationContainer}>
             <MapPin size={14} color={colors.textLight} />
-            <Text style={styles.locationText}>{coach.location}</Text>
+            <Text style={styles.locationText}>{coach.location || 'Location N/A'}</Text>
           </View>
         </View>
         
         <View style={styles.coachDetails}>
-          <Text style={styles.coachExperience}>{coach.experience}</Text>
-          <Text style={styles.coachPrice}>{coach.price}</Text>
+          <Text style={styles.coachExperience}>{coach.experience || 'Experience N/A'}</Text>
+          <Text style={styles.coachPrice}>{coach.price || 'Price N/A'}</Text>
         </View>
       </View>
     </Pressable>
@@ -156,31 +73,35 @@ function CoachCard({ coach, onPress }) {
 
 function PlayerCard({ player, onPress }) {
   return (
-    <Pressable style={styles.playerCard} onPress={onPress}>
-      <Image source={player.image} style={styles.playerImage} contentFit="cover" />
+    <Pressable style={styles.playerCard} onPress={() => onPress(player.id)}>
+      <Image 
+        source={player.image || 'https://via.placeholder.com/150x150.png?text=Player'}
+        style={styles.playerImage} 
+        contentFit="cover" 
+      />
       <View style={styles.playerContent}>
-        <Text style={styles.playerName}>{player.name}</Text>
+        <Text style={styles.playerName}>{player.name || 'Player Name'}</Text>
         
         <View style={styles.sportsContainer}>
-          {player.sports.map(sport => (
+          {(player.sports && player.sports.length > 0) ? player.sports.map(sport => (
             <View key={sport} style={styles.sportTag}>
               <Text style={styles.sportTagText}>{sport}</Text>
             </View>
-          ))}
+          )) : <Text style={styles.placeholderText}>No sports listed</Text>}
         </View>
         
         <View style={styles.playerMeta}>
           <View style={styles.levelContainer}>
             <Award size={14} color={colors.primary} />
-            <Text style={styles.levelText}>{player.level}</Text>
+            <Text style={styles.levelText}>{player.level || 'Level N/A'}</Text>
           </View>
           <View style={styles.locationContainer}>
             <MapPin size={14} color={colors.textLight} />
-            <Text style={styles.locationText}>{player.location}</Text>
+            <Text style={styles.locationText}>{player.location || 'Location N/A'}</Text>
           </View>
         </View>
         
-        <Text style={styles.availabilityText}>Available: {player.availability}</Text>
+        <Text style={styles.availabilityText}>Available: {player.availability || 'N/A'}</Text>
       </View>
     </Pressable>
   );
@@ -191,56 +112,158 @@ export default function ExploreScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
 
+  const [communities, setCommunities] = useState([]);
+  const [coaches, setCoaches] = useState([]);
+  const [players, setPlayers] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    console.log(`Fetching data for: ${selectedCategory}`);
+
+    try {
+      switch (selectedCategory) {
+        case 'communities':
+          const fetchedCommunities = await communitiesApi.getCommunities();
+          console.log('Fetched Communities:', fetchedCommunities);
+          const adaptedCommunities = fetchedCommunities.map(c => ({
+             id: c.id,
+             name: c.name,
+             image: c.image_url,
+             members: c.members?.[0]?.count || 0,
+             location: c.location,
+             description: c.description
+          }));
+          setCommunities(adaptedCommunities);
+          break;
+        case 'coaches':
+          const fetchedCoaches = await profilesApi.getProfiles({ is_coach: true });
+          console.log('Fetched Coaches:', fetchedCoaches);
+          const adaptedCoaches = fetchedCoaches.map(p => ({
+            id: p.id,
+            name: p.name,
+            image: p.avatar_url,
+            sport: p.sports?.[0] || 'Sport N/A',
+            rating: p.rating || 'N/A',
+            reviews: p.reviews || '0',
+            location: p.location || 'Location N/A',
+            experience: p.details?.experience || 'Experience N/A',
+            price: p.details?.price_per_hour ? `$${p.details.price_per_hour}/hour` : 'Price N/A'
+          }));
+          setCoaches(adaptedCoaches);
+          break;
+        case 'players':
+          const fetchedPlayers = await profilesApi.getProfiles({ is_coach: false });
+           console.log('Fetched Players:', fetchedPlayers);
+          const adaptedPlayers = fetchedPlayers.map(p => ({
+             id: p.id,
+             name: p.name,
+             image: p.avatar_url,
+             sports: p.sports || [],
+             level: p.level || 'Level N/A',
+             location: p.location || 'Location N/A',
+             availability: p.details?.availability || 'N/A'
+          }));
+          setPlayers(adaptedPlayers);
+          break;
+        case 'events':
+           console.log('Fetching events...');
+          setEvents([]);
+          break;
+        default:
+          console.warn('Unknown category:', selectedCategory);
+      }
+    } catch (err) {
+      console.error(`Failed to fetch ${selectedCategory}:`, err);
+      setError(`Failed to load ${selectedCategory}. Please try again.`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleCommunityPress = (id) => {
+     console.log("Navigate to community:", id);
+  };
+
+  const handleCoachPress = (id) => {
+     console.log("Navigate to profile:", id);
+     router.push(`/profile/${id}`);
+  };
+
+  const handlePlayerPress = (id) => {
+     console.log("Navigate to player:", id);
+      router.push(`/player/${id}`);
+  };
+  
+  const handleEventPress = (id) => {
+      console.log("Navigate to event/game:", id);
+  };
+
   const renderContent = () => {
+    if (isLoading) {
+      return <ActivityIndicator size="large" color={colors.primary} style={styles.loadingIndicator} />;
+    }
+    
+    if (error) {
+      return (
+         <View style={styles.errorContainer}>
+            <AlertCircle size={40} color={colors.danger} />
+            <Text style={styles.errorText}>{error}</Text>
+             <Pressable onPress={fetchData} style={styles.retryButton}>
+               <Text style={styles.retryButtonText}>Try Again</Text>
+             </Pressable>
+         </View>
+      );
+    }
+
     switch (selectedCategory) {
       case 'communities':
         return (
           <FlatList
-            data={MOCK_COMMUNITIES}
+            data={communities}
             renderItem={({ item }) => (
-              <CommunityCard 
-                community={item} 
-                onPress={() => router.push(`/community/${item.id}`)}
-              />
+              <CommunityCard community={item} onPress={handleCommunityPress} />
             )}
-            keyExtractor={item => item.id}
+            keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={<Text style={styles.emptyListText}>No communities found.</Text>}
           />
         );
       case 'coaches':
         return (
           <FlatList
-            data={MOCK_COACHES}
+            data={coaches}
             renderItem={({ item }) => (
-              <CoachCard 
-                coach={item} 
-                onPress={() => router.push(`/coach/${item.id}`)}
-              />
+              <CoachCard coach={item} onPress={handleCoachPress} />
             )}
-            keyExtractor={item => item.id}
+            keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={<Text style={styles.emptyListText}>No coaches found.</Text>}
           />
         );
       case 'players':
         return (
           <FlatList
-            data={MOCK_PLAYERS}
+            data={players}
             renderItem={({ item }) => (
-              <PlayerCard 
-                player={item} 
-                onPress={() => router.push(`/player/${item.id}`)}
-              />
+              <PlayerCard player={item} onPress={handlePlayerPress} />
             )}
-            keyExtractor={item => item.id}
+            keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={<Text style={styles.emptyListText}>No players found.</Text>}
           />
         );
+      case 'events':
+        return <Text style={styles.emptyListText}>Events coming soon!</Text>;
       default:
-        return (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No content available</Text>
-          </View>
-        );
+        return null;
     }
   };
 
@@ -261,9 +284,10 @@ export default function ExploreScreen() {
         <Search size={20} color={colors.textLight} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search..."
+          placeholder="Search communities, coaches..."
           value={searchQuery}
           onChangeText={setSearchQuery}
+          placeholderTextColor={colors.textLight}
         />
         <Pressable style={styles.filterButton}>
           <Filter size={20} color={colors.primary} />
@@ -527,4 +551,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textLight,
   },
+  loadingIndicator: {
+    marginTop: 50,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    marginTop: 30,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.danger,
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  retryButton: {
+     backgroundColor: colors.primary,
+     paddingVertical: 10,
+     paddingHorizontal: 20,
+     borderRadius: 8,
+  },
+  retryButtonText: {
+     color: colors.card,
+     fontSize: 16,
+     fontWeight: '600',
+  },
+  emptyListText: {
+     textAlign: 'center',
+     marginTop: 50,
+     color: colors.textLight,
+     fontSize: 16,
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: colors.textLight,
+    fontStyle: 'italic',
+  }
 });

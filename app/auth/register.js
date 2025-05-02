@@ -54,14 +54,9 @@ export default function RegisterScreen() {
     }
   };
 
-  const handleSocialSignup = (provider) => {
-    // In a real app, this would integrate with the respective social auth provider
-    console.log(`Signup with ${provider}`);
-    
-    // Simulate successful registration and redirect to onboarding
-    setTimeout(() => {
-      router.replace('/onboarding');
-    }, 1000);
+  const handleSocialLogin = (provider) => {
+    // Display message that social login is not implemented yet
+    alert(`${provider} login coming soon!`);
   };
 
   return (
@@ -163,7 +158,7 @@ export default function RegisterScreen() {
         <View style={styles.socialButtonsContainer}>
           <Pressable 
             style={styles.socialButton}
-            onPress={() => handleSocialSignup('Facebook')}
+            onPress={() => handleSocialLogin('Facebook')}
           >
             <Image 
               source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Facebook_Logo_%282019%29.png/1200px-Facebook_Logo_%282019%29.png' }} 
@@ -173,7 +168,7 @@ export default function RegisterScreen() {
 
           <Pressable 
             style={styles.socialButton}
-            onPress={() => handleSocialSignup('Google')}
+            onPress={() => handleSocialLogin('Google')}
           >
             <Image 
               source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/1200px-Google_%22G%22_Logo.svg.png' }} 
