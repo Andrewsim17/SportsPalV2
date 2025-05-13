@@ -47,14 +47,35 @@ export default function GamesScreen() {
     try {
       const fetchedGames = await gamesApi.getGames(filters);
       
-      // Adapt fetched data structure to GameCard props if needed
-      // Example: Calculating playersCurrent if it's not directly available
-      const adaptedGames = fetchedGames.map(game => ({
-        ...game,
-        playersCurrent: game.participants?.length || 0, // Calculate current players
-        // Ensure organizer data structure matches GameCard expectations
-        organizer: game.organizer ? { name: game.organizer.name, rating: 4.5 /* TODO: Fetch real rating */ } : { name: 'Unknown Organizer', rating: 0 }
-      }));
+      // Adapt fetched data structure to GameCard props with consistent player count logic
+      const adaptedGames = fetchedGames.map(game => {
+        // Get the actual number of participants
+        const participantCount = game.participants?.length || 0;
+        
+        // Check if organizer is already in the participants
+        const organizerInParticipants = game.participants?.some(p => 
+          p.player?.id === game.organizer?.id
+        );
+        
+        // Calculate current players count considering organizer
+        const playersCurrent = organizerInParticipants 
+          ? participantCount 
+          : participantCount + 1; // Include organizer
+        
+        return {
+          ...game,
+          playersCurrent: playersCurrent,
+          // Ensure organizer data structure matches expectations
+          organizer: game.organizer ? { 
+            id: game.organizer.id,
+            name: game.organizer.name || 'Unknown Organizer', 
+            rating: 4.5 /* TODO: Fetch real rating */
+          } : { 
+            name: 'Unknown Organizer', 
+            rating: 0 
+          }
+        };
+      });
       
       setGames(adaptedGames);
     } catch (err) {
@@ -103,7 +124,9 @@ export default function GamesScreen() {
     }
     
     // Check if user is already a participant
-    const isAlreadyParticipant = game.participants?.some(p => p.player?.id === user.id);
+    const isAlreadyParticipant = game.participants?.some(p => 
+      p.player?.id === user.id || p.user_id === user.id
+    );
     if (isAlreadyParticipant) {
       Alert.alert('Already Joined', 'You are already part of this game.');
       return;
@@ -122,12 +145,59 @@ export default function GamesScreen() {
           onPress: async () => {
             setIsLoading(true); // Show loading indicator
             try {
+              // Join the game
               await gamesApi.joinGame(game.id, user.id);
               Alert.alert('Success', 'You have joined the game!');
-              fetchGames(); // Refresh the game list to show updated player count
+              
+              // Fetch the full game details again to ensure we have the latest participant count
+              const updatedGame = await gamesApi.getGame(game.id);
+              
+              // Update the games list with the new participant count
+              setGames(prevGames => 
+                prevGames.map(g => {
+                  if (g.id === game.id) {
+                    // Calculate updated player count using the same logic consistently
+                    const participantCount = updatedGame.participants?.length || 0;
+                    
+                    // Check if organizer is already in the participants 
+                    const organizerInParticipants = updatedGame.participants?.some(p => 
+                      p.player?.id === updatedGame.organizer?.id
+                    );
+                    
+                    // Calculate player count properly
+                    const updatedPlayerCount = organizerInParticipants
+                      ? participantCount
+                      : participantCount + 1; // Include organizer
+                    
+                    console.log("Game updated after join:", {
+                      gameId: game.id,
+                      title: game.title,
+                      participantCount,
+                      organizerInParticipants,
+                      updatedPlayerCount
+                    });
+                    
+                    return {
+                      ...g,
+                      playersCurrent: updatedPlayerCount,
+                      participants: updatedGame.participants
+                    };
+                  }
+                  return g;
+                })
+              );
             } catch (joinError) {
               console.error("Failed to join game:", joinError);
-              Alert.alert('Error', joinError.message || 'Could not join the game.');
+              
+              let errorMessage = joinError.message || 'Could not join the game.';
+              // Handle specific database constraint errors
+              if (joinError.code === '23505') {
+                errorMessage = 'You are already a participant in this game.';
+                // Try to refresh the game data anyway
+                await fetchGames();
+              }
+              
+              Alert.alert('Error', errorMessage);
             } finally {
               setIsLoading(false); // Hide loading indicator
             }

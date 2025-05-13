@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -8,7 +8,9 @@ import {
   TextInput, 
   Alert,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  FlatList,
+  ActivityIndicator
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { 
@@ -30,12 +32,25 @@ export default function PaymentScreen() {
   const [expiryDate, setExpiryDate] = useState('');
   const [cvv, setCvv] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [bookings, setBookings] = useState([]);
   
   const venueName = params.venueName;
   const date = new Date(params.date);
-  const time = new Date(params.time);
-  const courtName = params.courtName;
   const price = parseFloat(params.price);
+  const courtCount = parseInt(params.courtCount || 1);
+  
+  // Parse the time parameter which is now a JSON string containing booking info
+  useEffect(() => {
+    try {
+      if (params.time) {
+        const bookingData = JSON.parse(params.time);
+        setBookings(bookingData);
+      }
+    } catch (error) {
+      console.error('Error parsing booking data:', error);
+      setBookings([]);
+    }
+  }, [params.time]);
   
   const formatDate = (date) => {
     return date.toLocaleDateString('en-US', {
@@ -46,11 +61,18 @@ export default function PaymentScreen() {
     });
   };
   
-  const formatTime = (time) => {
-    return time.toLocaleTimeString('en-US', {
+  const formatTime = (timeObj) => {
+    if (!timeObj) return 'N/A';
+    const start = new Date(timeObj.start);
+    const end = new Date(timeObj.end);
+    
+    return `${start.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit'
-    });
+    })} - ${end.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit'
+    })}`;
   };
   
   const handleCardNumberChange = (text) => {
@@ -100,6 +122,30 @@ export default function PaymentScreen() {
     }, 2000);
   };
   
+  // Render a booking item
+  const renderBookingItem = ({ item, index }) => {
+    const court = item.courtId;
+    return (
+      <View style={styles.bookingItem} key={`booking-${index}`}>
+        <View style={styles.bookingHeader}>
+          <Text style={styles.bookingTitle}>Court Booking #{index + 1}</Text>
+        </View>
+        <View style={styles.bookingDetail}>
+          <Text style={styles.bookingLabel}>Court ID:</Text>
+          <Text style={styles.bookingValue}>{court}</Text>
+        </View>
+        <View style={styles.bookingDetail}>
+          <Text style={styles.bookingLabel}>Time:</Text>
+          <Text style={styles.bookingValue}>{formatTime(item)}</Text>
+        </View>
+        <View style={styles.bookingDetail}>
+          <Text style={styles.bookingLabel}>Duration:</Text>
+          <Text style={styles.bookingValue}>{item.duration} hour{item.duration !== 1 ? 's' : ''}</Text>
+        </View>
+      </View>
+    );
+  };
+  
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -127,19 +173,26 @@ export default function PaymentScreen() {
           </View>
           
           <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Court:</Text>
-            <Text style={styles.detailValue}>{courtName}</Text>
-          </View>
-          
-          <View style={styles.detailItem}>
             <Calendar size={16} color={colors.primary} />
             <Text style={styles.detailText}>{formatDate(date)}</Text>
           </View>
           
           <View style={styles.detailItem}>
-            <Clock size={16} color={colors.primary} />
-            <Text style={styles.detailText}>{formatTime(time)}</Text>
+            <Text style={styles.detailLabel}>Number of Courts:</Text>
+            <Text style={styles.detailValue}>{courtCount}</Text>
           </View>
+          
+          {/* Bookings list */}
+          {bookings.length > 0 && (
+            <View style={styles.bookingsList}>
+              <FlatList
+                data={bookings}
+                renderItem={renderBookingItem}
+                keyExtractor={(_, index) => `booking-${index}`}
+                scrollEnabled={false}
+              />
+            </View>
+          )}
           
           <View style={styles.detailItem}>
             <DollarSign size={16} color={colors.primary} />
@@ -243,7 +296,7 @@ export default function PaymentScreen() {
           disabled={isLoading}
         >
           {isLoading ? (
-            <Text style={styles.payButtonText}>Processing...</Text>
+            <ActivityIndicator size="small" color={colors.card} />
           ) : (
             <Text style={styles.payButtonText}>Pay ${(price + 2).toFixed(2)}</Text>
           )}
@@ -397,5 +450,39 @@ const styles = StyleSheet.create({
     color: colors.card,
     fontSize: 16,
     fontWeight: '600',
+  },
+  bookingsList: {
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  bookingItem: {
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bookingHeader: {
+    marginBottom: 8,
+  },
+  bookingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  bookingDetail: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  bookingLabel: {
+    fontSize: 14,
+    color: colors.textLight,
+  },
+  bookingValue: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
   },
 });

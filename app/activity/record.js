@@ -425,7 +425,7 @@ export default function RecordActivityScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Log Activity / Quick Post',
+          title: 'Record Activity',
           headerStyle: {
             backgroundColor: colors.card,
           },

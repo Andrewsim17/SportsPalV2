@@ -1,23 +1,27 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { 
   MapPin, 
-  Star, 
   Clock, 
   Calendar, 
   DollarSign, 
   ChevronLeft,
   ChevronRight,
   Check,
-  Info
+  Info,
+  Phone,
+  Mail,
+  Globe
 } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import CalendarPicker from '../../components/CalendarPicker';
 import TimeAvailabilityTable from '../../components/TimeAvailabilityTable';
-import SportsPalMap from '../../components/MapView';
+import MapboxMap from '../../components/MapboxMap';
 import { venuesApi } from '../../lib/api';
+import { processVenueImages } from '../../lib/storage';
+import * as Linking from 'expo-linking';
 
 // Helper function to format opening hours (optional)
 const formatOpeningHours = (hoursJson) => {
@@ -35,17 +39,61 @@ export default function VenueDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   
+  // All state hooks must be declared first, in a consistent order
   const [venue, setVenue] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageError, setImageError] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState(null);
   const [selectedSport, setSelectedSport] = useState(null);
   const [bookedSlots, setBookedSlots] = useState([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  
+  // Constants (not hooks) should be used to avoid different hook patterns
+  const FALLBACK_IMAGE = 'https://picsum.photos/800/400?text=No+Image';
 
+  // Define all useMemo and useCallback hooks
+  const displayVenue = useMemo(() => {
+    if (!venue) return null;
+    
+    console.log('Raw venue data:', JSON.stringify(venue));
+    
+    // Process the images
+    const processedImages = processVenueImages(venue.images);
+    console.log('Processed venue images:', processedImages);
+    
+    return {
+      ...venue,
+      images: processedImages,
+      location: `${venue.address || ''}, ${venue.city || ''}, ${venue.state || ''}`,
+      hours: formatOpeningHours(venue.opening_hours),
+      courts: venue?.courts || [],
+      distance: 'N/A',
+      pricePerHour: Math.floor(Math.random() * 50) + 20,
+      availability: 'Available now',
+      phone: venue.phone || '+1 (555) 123-4567',
+      email: venue.email || 'contact@venue.com',
+      website: venue.website || 'https://www.venue.com'
+    };
+  }, [venue]);
+  
+  const filteredCourts = useMemo(() => {
+    if (!displayVenue?.courts) return [];
+    return displayVenue.courts.filter(court => 
+      court.sport === selectedSport && 
+      (court.status === 'active' || court.name.toLowerCase().includes('court 4'))
+    );
+  }, [displayVenue, selectedSport]);
+  
+  const currentImageSrc = useMemo(() => {
+    if (!displayVenue?.images || displayVenue.images.length === 0 || imageError) {
+      return { uri: FALLBACK_IMAGE };
+    }
+    return { uri: displayVenue.images[currentImageIndex] };
+  }, [displayVenue, currentImageIndex, imageError]);
+  
   const fetchVenueDetails = useCallback(async () => {
     if (!id) {
       setError('Venue ID is missing');
@@ -75,7 +123,11 @@ export default function VenueDetailScreen() {
       return;
     }
     setAvailabilityLoading(true);
-    console.log('Fetching availability for:', { venueId: venue.id, sport: selectedSport, date: selectedDate.toISOString().split('T')[0] });
+    console.log('Fetching availability for:', { 
+      venueId: venue.id, 
+      sport: selectedSport, 
+      date: selectedDate.toISOString().split('T')[0] 
+    });
     try {
       const fetchedBookings = await venuesApi.getVenueAvailability(venue.id, selectedSport, selectedDate);
       setBookedSlots(fetchedBookings);
@@ -87,7 +139,134 @@ export default function VenueDetailScreen() {
       setAvailabilityLoading(false);
     }
   }, [venue?.id, selectedSport, selectedDate]);
+  
+  const handleNextImage = useCallback(() => {
+    if (displayVenue?.images?.length > 0) {
+      setCurrentImageIndex((prev) => (prev + 1) % displayVenue.images.length);
+      setImageError(false);
+    }
+  }, [displayVenue]);
+  
+  const handlePrevImage = useCallback(() => {
+    if (displayVenue?.images?.length > 0) {
+      setCurrentImageIndex((prev) => (prev - 1 + displayVenue.images.length) % displayVenue.images.length);
+      setImageError(false);
+    }
+  }, [displayVenue]);
+  
+  const handleBookNow = useCallback(() => {
+    if (!displayVenue || !selectedTime || selectedTime.length === 0) return;
+    
+    // Calculate the total price from the selected time slots
+    const totalPrice = selectedTime.reduce((sum, booking) => sum + (booking.price || 0), 0);
+    
+    router.push({
+      pathname: '/venue/payment',
+      params: {
+        venueId: displayVenue.id,
+        venueName: displayVenue.name,
+        date: selectedDate.toISOString(),
+        time: JSON.stringify(selectedTime), // Send all court bookings as JSON
+        courtCount: selectedTime.length,
+        price: totalPrice.toFixed(2)
+      }
+    });
+  }, [displayVenue, selectedTime, selectedDate, router]);
+  
+  const handleSelectSport = useCallback((sport) => {
+    setSelectedSport(sport);
+    setSelectedTime(null);
+  }, []);
+  
+  const handleSelectDate = useCallback((date) => {
+    setSelectedDate(date);
+    setSelectedTime(null);
+  }, []);
 
+  // Add handlers for contact actions
+  const handlePhoneCall = useCallback(() => {
+    if (displayVenue?.phone) {
+      const phoneUrl = `tel:${displayVenue.phone.replace(/[^\d+]/g, '')}`;
+      Linking.canOpenURL(phoneUrl)
+        .then(supported => {
+          if (supported) {
+            return Linking.openURL(phoneUrl);
+          } else {
+            Alert.alert('Error', 'Phone calls are not supported on this device');
+          }
+        })
+        .catch(err => {
+          console.error('An error occurred', err);
+          Alert.alert('Error', 'Could not open phone app');
+        });
+    }
+  }, [displayVenue]);
+
+  const handleEmail = useCallback(() => {
+    if (displayVenue?.email) {
+      const emailUrl = `mailto:${displayVenue.email}?subject=Inquiry about ${displayVenue.name}`;
+      Linking.canOpenURL(emailUrl)
+        .then(supported => {
+          if (supported) {
+            return Linking.openURL(emailUrl);
+          } else {
+            Alert.alert('Error', 'Email is not supported on this device');
+          }
+        })
+        .catch(err => {
+          console.error('An error occurred', err);
+          Alert.alert('Error', 'Could not open email app');
+        });
+    }
+  }, [displayVenue]);
+
+  const handleVisitWebsite = useCallback(() => {
+    if (displayVenue?.website) {
+      const websiteUrl = displayVenue.website.startsWith('http') 
+        ? displayVenue.website 
+        : `https://${displayVenue.website}`;
+      
+      Linking.canOpenURL(websiteUrl)
+        .then(supported => {
+          if (supported) {
+            return Linking.openURL(websiteUrl);
+          } else {
+            Alert.alert('Error', 'Web browsing is not supported on this device');
+          }
+        })
+        .catch(err => {
+          console.error('An error occurred', err);
+          Alert.alert('Error', 'Could not open browser');
+        });
+    }
+  }, [displayVenue]);
+
+  const getAvailability = (timeSlotDate, courtId) => {
+    const slotStart = new Date(selectedDate); // Start with selected date
+    slotStart.setHours(timeSlotDate.getHours(), timeSlotDate.getMinutes(), 0, 0);
+
+    const slotEnd = new Date(slotStart);
+    slotEnd.setMinutes(slotStart.getMinutes() + 30); // 30-minute slots
+
+    // Check if court is under maintenance (Court 4)
+    const court = courts.find(c => c.id === courtId);
+    if (court && court.name.toLowerCase().includes('court 4')) {
+      return 'unavailable'; // Mark Court 4 as unavailable
+    }
+
+    // Check if any booking for this court overlaps with this time slot
+    const isBooked = bookedSlots.some(booking => {
+      if (booking.court_id !== courtId) return false;
+      const bookingStart = new Date(booking.start_time);
+      const bookingEnd = new Date(booking.end_time);
+      // Check for overlap: (SlotStart < BookingEnd) and (SlotEnd > BookingStart)
+      return slotStart < bookingEnd && slotEnd > bookingStart;
+    });
+
+    return isBooked ? 'unavailable' : 'available';
+  };
+
+  // useEffect hooks must come after all useMemo/useCallback declarations
   useEffect(() => {
     fetchVenueDetails();
   }, [fetchVenueDetails]);
@@ -98,7 +277,7 @@ export default function VenueDetailScreen() {
     }
   }, [venue, selectedDate, selectedSport, fetchAvailability]);
 
-  // Handle loading state
+  // Loading and error states - moved here to ensure they're only rendered after all hooks
   if (isLoading) {
     return (
       <View style={styles.centeredContainer}>
@@ -107,7 +286,6 @@ export default function VenueDetailScreen() {
     );
   }
 
-  // Handle error state
   if (error) {
     return (
       <View style={styles.centeredContainer}>
@@ -119,7 +297,6 @@ export default function VenueDetailScreen() {
     );
   }
   
-  // Handle venue not found after fetch
   if (!venue) {
     return (
       <View style={styles.centeredContainer}> 
@@ -131,51 +308,7 @@ export default function VenueDetailScreen() {
     );
   }
   
-  // --- Adapt fetched data for display --- 
-  const displayVenue = {
-    ...venue, // Spread fetched data
-    images: venue.images && venue.images.length > 0 ? venue.images : ['https://via.placeholder.com/300/cccccc/ffffff?text=No+Image'],
-    location: `${venue.address || ''}, ${venue.city || ''}, ${venue.state || ''}`, // Combine address parts
-    hours: formatOpeningHours(venue.opening_hours), // Format hours
-    courts: venue?.courts || [], // Use fetched courts
-    // --- Placeholder/Default values for data not directly fetched by getVenue ---
-    rating: 4.5, // Placeholder - Needs separate review/rating fetch
-    reviews: Math.floor(Math.random() * 100), // Placeholder
-    distance: 'N/A', // Placeholder - Needs location calculation
-    pricePerHour: Math.floor(Math.random() * 50) + 20, // Placeholder - Needs pricing logic
-    availability: 'Check details', // Placeholder - Needs availability logic
-  };
-  // --- End data adaptation ---
-
-  // Filter courts based on selectedSport (using the *actual* courts now)
-  const filteredCourts = displayVenue.courts.filter(court => 
-    court.sport === selectedSport && court.status === 'active' // Also ensure court is active
-  );
-
-  const nextImage = () => {
-    setCurrentImageIndex((currentImageIndex + 1) % displayVenue.images.length);
-  };
-
-  const prevImage = () => {
-    setCurrentImageIndex((currentImageIndex - 1 + displayVenue.images.length) % displayVenue.images.length);
-  };
-
-  const handleBookNow = () => {
-    // ... uses displayVenue.id, displayVenue.name, displayVenue.pricePerHour ...
-    // Make sure router params use displayVenue values
-    router.push({
-      pathname: '/venue/payment',
-      params: {
-        venueId: displayVenue.id,
-        venueName: displayVenue.name,
-        date: selectedDate.toISOString(),
-        time: selectedTime.toISOString(),
-        courtName: `All ${selectedSport} Courts`, // This might need refinement
-        price: displayVenue.pricePerHour // Use placeholder price for now
-      }
-    });
-  };
-
+  // Main render - only rendered if all hooks have been called and data is available
   return (
     <View style={styles.container}>
       <Stack.Screen 
@@ -186,9 +319,15 @@ export default function VenueDetailScreen() {
 
       <View style={styles.imageContainer}>
         <Image
-          source={displayVenue.images[currentImageIndex]}
+          source={currentImageSrc}
           style={styles.image}
           contentFit="cover"
+          transition={300}
+          onError={() => {
+            console.error('Detail image failed to load:', displayVenue?.images?.[currentImageIndex]);
+            setImageError(true);
+          }}
+          placeholder={{ uri: FALLBACK_IMAGE }}
         />
         
         <Pressable style={styles.backButton} onPress={() => router.back()}>
@@ -196,13 +335,15 @@ export default function VenueDetailScreen() {
         </Pressable>
         
         <View style={styles.imageNav}>
-          <Pressable style={styles.imageNavButton} onPress={prevImage}>
+          <Pressable style={styles.imageNavButton} onPress={handlePrevImage}>
             <ChevronLeft size={24} color={colors.card} />
           </Pressable>
           
-          <Text style={styles.imageCounter}>{currentImageIndex + 1}/{displayVenue.images.length}</Text>
+          <Text style={styles.imageCounter}>
+            {currentImageIndex + 1}/{displayVenue?.images?.length || 1}
+          </Text>
           
-          <Pressable style={styles.imageNavButton} onPress={nextImage}>
+          <Pressable style={styles.imageNavButton} onPress={handleNextImage}>
             <ChevronRight size={24} color={colors.card} />
           </Pressable>
         </View>
@@ -216,14 +357,17 @@ export default function VenueDetailScreen() {
           <Text style={styles.infoText}>{displayVenue.location}</Text>
         </View>
         
-        {/* Location Map */}
         {(displayVenue.latitude && displayVenue.longitude) ? (
-          <SportsPalMap
-            latitude={displayVenue.latitude}
-            longitude={displayVenue.longitude}
-            title={displayVenue.name}
-            description={displayVenue.address}
+          <MapboxMap
+            initialLatitude={displayVenue.latitude}
+            initialLongitude={displayVenue.longitude}
+            markers={[{
+              latitude: displayVenue.latitude,
+              longitude: displayVenue.longitude,
+              title: displayVenue.name
+            }]}
             style={styles.map}
+            zoomLevel={15}
           />
         ) : (
           <View style={styles.mapPlaceholder}>
@@ -231,19 +375,6 @@ export default function VenueDetailScreen() {
             <Text style={styles.mapPlaceholderText}>Map location not available</Text>
           </View>
         )}
-        
-        <View style={styles.header}>
-          <Text style={styles.name}>{displayVenue.name}</Text>
-          <View style={styles.ratingContainer}>
-            <Star size={16} color={colors.primary} fill={colors.primary} />
-            <Text style={styles.rating}>{displayVenue.rating} ({displayVenue.reviews} reviews)</Text>
-          </View>
-        </View>
-
-        <View style={styles.locationContainer}>
-          <MapPin size={16} color={colors.textLight} />
-          <Text style={styles.location}>{displayVenue.location}</Text>
-        </View>
 
         <View style={styles.sportsContainer}>
           {displayVenue.sports.map((sport) => (
@@ -253,10 +384,7 @@ export default function VenueDetailScreen() {
                 styles.sportTag,
                 selectedSport === sport && styles.sportTagSelected
               ]}
-              onPress={() => {
-                setSelectedSport(sport);
-                setSelectedTime(null);
-              }}
+              onPress={() => handleSelectSport(sport)}
             >
               <Text style={[
                 styles.sportText,
@@ -271,6 +399,37 @@ export default function VenueDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Description</Text>
           <Text style={styles.description}>{displayVenue.description}</Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Contact Information</Text>
+          <View style={styles.contactContainer}>
+            <Pressable 
+              style={styles.contactItem} 
+              onPress={handlePhoneCall}
+            >
+              <Phone size={20} color={colors.primary} />
+              <Text style={styles.contactText}>{displayVenue.phone}</Text>
+            </Pressable>
+            
+            <Pressable 
+              style={styles.contactItem} 
+              onPress={handleEmail}
+            >
+              <Mail size={20} color={colors.primary} />
+              <Text style={styles.contactText}>{displayVenue.email}</Text>
+            </Pressable>
+            
+            <Pressable 
+              style={styles.contactItem} 
+              onPress={handleVisitWebsite}
+            >
+              <Globe size={20} color={colors.primary} />
+              <Text style={styles.contactText}>{
+                displayVenue.website?.replace(/^https?:\/\/(www\.)?/, '')
+              }</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -300,16 +459,22 @@ export default function VenueDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Book a Slot</Text>
-          <Text style={styles.bookingPrice}>${displayVenue.pricePerHour} per hour per court</Text>
+          <Text style={styles.sectionTitle}>Price</Text>
+          <View style={styles.pricingDetailsContainer}>
+            <View style={styles.pricingItem}>
+              <Text style={styles.pricingTypeText}>Weekday:</Text>
+              <Text style={styles.pricingValueText}>$20 per hour</Text>
+            </View>
+            <View style={[styles.pricingItem, styles.noBorder]}>
+              <Text style={styles.pricingTypeText}>Weekend:</Text>
+              <Text style={styles.pricingValueText}>$30 per hour</Text>
+            </View>
+          </View>
           
           <Text style={styles.dateLabel}>Select Date</Text>
           <CalendarPicker
             selectedDate={selectedDate}
-            onSelectDate={(date) => {
-              setSelectedDate(date);
-              setSelectedTime(null);
-            }}
+            onSelectDate={handleSelectDate}
           />
           
           <Text style={styles.dateLabel}>Select Time</Text>
@@ -322,6 +487,9 @@ export default function VenueDetailScreen() {
               sportType={selectedSport}
               bookedSlots={bookedSlots}
               selectedDate={selectedDate}
+              venueHours={displayVenue?.hours}
+              venueId={displayVenue?.id}
+              courtUnderMaintenance="Court 4"
             />
           )}
         </View>
@@ -331,7 +499,10 @@ export default function VenueDetailScreen() {
         <View style={styles.priceContainer}>
           <Text style={styles.priceLabel}>Total</Text>
           <Text style={styles.price}>
-            ${displayVenue.pricePerHour * filteredCourts.length}
+            ${selectedTime 
+              ? selectedTime.reduce((sum, booking) => sum + (booking.price || 0), 0).toFixed(2)
+              : '0.00'
+            }
           </Text>
         </View>
         <Pressable 
@@ -342,7 +513,7 @@ export default function VenueDetailScreen() {
           disabled={!selectedTime}
           onPress={handleBookNow}
         >
-          <Text style={styles.bookButtonText}>Book Now</Text>
+          <Text style={styles.bookButtonText}>Book</Text>
         </Pressable>
       </View>
     </View>
@@ -412,38 +583,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   infoText: {
-    fontSize: 14,
-    color: colors.textLight,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  name: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    flex: 1,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  rating: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 16,
-  },
-  location: {
     fontSize: 14,
     color: colors.textLight,
   },
@@ -603,5 +742,45 @@ const styles = StyleSheet.create({
   mapPlaceholderText: {
     fontSize: 14,
     color: colors.textLight,
+  },
+  contactContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  contactText: {
+    fontSize: 14,
+    color: colors.text,
+    marginLeft: 12,
+  },
+  pricingDetailsContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  pricingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingBottom: 4,
+  },
+  noBorder: {
+    marginBottom: 0,
+    paddingBottom: 0,
+  },
+  pricingTypeText: {
+    fontSize: 14,
+    color: colors.textLight,
+  },
+  pricingValueText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
   },
 });

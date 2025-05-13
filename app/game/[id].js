@@ -11,12 +11,40 @@ import {
   DollarSign,
   Share2,
   MessageSquare,
-  Award
+  Award,
+  PlusCircle
 } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../store/auth-store';
 import { gamesApi } from '../../lib/api';
+import { chatApi } from '../../lib/api';
+
+// Function to get placeholder images for each sport
+const getSportImage = (sport) => {
+  // Default sport image if no sport specified
+  if (!sport) return 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&auto=format&fit=crop';
+  
+  // Map of sports to placeholder images from Unsplash
+  const sportImageMap = {
+    'Basketball': 'https://images.unsplash.com/photo-1546519638-68e109acd27d?w=800&auto=format&fit=crop',
+    'Tennis': 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?w=800&auto=format&fit=crop',
+    'Football': 'https://images.unsplash.com/photo-1508098682722-e99c643e7485?w=800&auto=format&fit=crop',
+    'Soccer': 'https://images.unsplash.com/photo-1575361204480-aadea25e6e68?w=800&auto=format&fit=crop',
+    'Volleyball': 'https://images.unsplash.com/photo-1592656094267-764a45160876?w=800&auto=format&fit=crop',
+    'Badminton': 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=800&auto=format&fit=crop',
+    'Running': 'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=800&auto=format&fit=crop',
+    'Cycling': 'https://images.unsplash.com/photo-1541625602330-2277a4c46182?w=800&auto=format&fit=crop',
+    'Swimming': 'https://images.unsplash.com/photo-1600965962161-19c75a0aafcf?w=800&auto=format&fit=crop',
+    'Golf': 'https://images.unsplash.com/photo-1535131749006-b7f58c99034b?w=800&auto=format&fit=crop',
+    'Yoga': 'https://images.unsplash.com/photo-1575052814086-f385e2e2ad1b?w=800&auto=format&fit=crop',
+    'Baseball': 'https://images.unsplash.com/photo-1521941651707-748bdbae77e9?w=800&auto=format&fit=crop',
+    'Hiking': 'https://images.unsplash.com/photo-1551632811-561732d1e306?w=800&auto=format&fit=crop',
+  };
+  
+  // Return the mapped image or a default sports image if not found
+  return sportImageMap[sport] || 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&auto=format&fit=crop';
+};
 
 export default function GameDetailScreen() {
   const { id: gameId } = useLocalSearchParams();
@@ -38,9 +66,13 @@ export default function GameDetailScreen() {
       const fetchedGame = await gamesApi.getGame(gameId);
       console.log("Fetched game details:", fetchedGame);
       
+      // Get the actual number of participants
+      const participantCount = fetchedGame.participants?.length || 0;
+      
       const adaptedGame = {
         ...fetchedGame,
-        playersCurrent: fetchedGame.participants?.length || 0,
+        playersCurrent: participantCount,
+        playersNeeded: fetchedGame.players_needed || 4,
         organizer: fetchedGame.organizer ? {
           id: fetchedGame.organizer.id,
           name: fetchedGame.organizer.name || 'Unknown Organizer',
@@ -52,15 +84,52 @@ export default function GameDetailScreen() {
             name: p.player?.name || 'Unknown Player',
             avatar: p.player?.avatar_url || 'https://ui-avatars.com/api/?name=P&background=cccccc&color=fff',
             isOrganizer: p.player?.id === fetchedGame.organizer?.id,
-            status: p.status
+            status: p.status,
+            user_id: p.user_id
         })) || []
       };
       
+      // Check if organizer is already in participants
+      const organizerInParticipants = adaptedGame.participants.some(p => 
+        p.isOrganizer || p.id === fetchedGame.organizer?.id
+      );
+      
+      // Add organizer to participants if they're not already included
+      if (!organizerInParticipants && adaptedGame.organizer) {
+        // Since we're adding the organizer, increment playersCurrent by 1
+        adaptedGame.playersCurrent = participantCount + 1;
+        
+        if (!adaptedGame.participants.some(p => p.id === adaptedGame.organizer.id)) {
+          adaptedGame.participants.unshift({
+            id: adaptedGame.organizer.id,
+            name: adaptedGame.organizer.name,
+            avatar: adaptedGame.organizer.avatar,
+            isOrganizer: true,
+            status: 'confirmed',
+            user_id: adaptedGame.organizer.id
+          });
+        }
+      }
+
       setGame(adaptedGame);
       
-      if (user && adaptedGame.participants.some(p => p.id === user.id)) {
-        setIsJoined(true);
+      // Check if user has joined the game with any status
+      if (user) {
+        const userParticipant = adaptedGame.participants.find(p => 
+          p.id === user.id || p.user_id === user.id
+        );
+        if (userParticipant) {
+          setIsJoined(true);
+        } else {
+          setIsJoined(false);
+        }
       }
+
+      console.log("Updated game data:", {
+        playersCurrent: adaptedGame.playersCurrent,
+        playersNeeded: adaptedGame.playersNeeded,
+        participants: adaptedGame.participants.length
+      });
 
     } catch (err) {
       console.error("Failed to fetch game details:", err);
@@ -83,7 +152,6 @@ export default function GameDetailScreen() {
     if (!game) return;
 
     const action = isJoined ? 'Leave' : 'Join';
-    const apiCall = isJoined ? gamesApi.leaveGame : gamesApi.joinGame;
     const confirmationMessage = isJoined 
       ? 'Are you sure you want to leave this game?' 
       : 'By joining this game, you commit to attend. Cancellations may affect your rating. Do you want to proceed?';
@@ -100,14 +168,43 @@ export default function GameDetailScreen() {
             setIsJoiningOrLeaving(true);
             setError(null);
             try {
-              await apiCall(game.id, user.id);
-              Alert.alert('Success', `You have ${isJoined ? 'left' : 'joined'} the game!`);
+              // For joining, we'll use 'pending' status
+              if (isJoined) {
+                await gamesApi.leaveGame(game.id, user.id);
+                Alert.alert('Success', 'You have left the game!');
+              } else {
+                // Check if user is already a participant
+                const isAlreadyParticipant = game.participants?.some(p => 
+                  p.id === user.id || p.user_id === user.id
+                );
+                
+                if (!isAlreadyParticipant) {
+                  await gamesApi.joinGame(game.id, user.id, 'pending');
+                  Alert.alert('Success', 'You have joined the game!');
+                }
+              }
+              
+              // Update isJoined state based on the action performed
               setIsJoined(!isJoined);
-              fetchGameDetails(); 
+              
+              // Explicitly fetch game details to update participant count
+              await fetchGameDetails();
             } catch (err) {
               console.error(`Failed to ${action.toLowerCase()} game:`, err);
-              Alert.alert('Error', err.message || `Could not ${action.toLowerCase()} the game.`);
-              setError(err.message);
+              let errorMessage = err.message || `Could not ${action.toLowerCase()} the game.`;
+              
+              // Handle specific database constraint errors
+              if (err.code === '23514') {
+                errorMessage = 'There was an issue with the request format. Please try again.';
+              } else if (err.code === '23505') {
+                errorMessage = 'You are already a participant in this game.';
+                // Set isJoined to true since they are already a participant
+                setIsJoined(true);
+                await fetchGameDetails(); // Refresh game details
+              }
+              
+              Alert.alert('Error', errorMessage);
+              setError(errorMessage);
             } finally {
               setIsJoiningOrLeaving(false);
             }
@@ -117,8 +214,32 @@ export default function GameDetailScreen() {
       );
   };
   
-  const handleMessageOrganizer = () => {
-    router.push(`/chat/${game.organizer.id}`);
+  const handleMessageOrganizer = async () => {
+    if (!user) {
+      Alert.alert('Login Required', 'You need to be logged in to message the organizer.');
+      return;
+    }
+    
+    if (!game.organizer || !game.organizer.id) {
+      Alert.alert('Error', 'Cannot identify the organizer to send a message.');
+      return;
+    }
+    
+    try {
+      // Show loading indicator
+      setIsLoading(true);
+      
+      // Find or create a chat room with the organizer
+      const chatRoom = await chatApi.findOrCreateChatRoom(user.id, game.organizer.id);
+      
+      // Navigate to the chat screen
+      router.push(`/chat/${chatRoom.id}`);
+    } catch (error) {
+      console.error('Failed to start chat with organizer:', error);
+      Alert.alert('Error', 'Could not start a chat with the organizer. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleShareGame = async () => {
@@ -139,8 +260,38 @@ export default function GameDetailScreen() {
   };
   
   const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    if (!dateString) return '';
+    
+    try {
+      const date = new Date(dateString);
+      
+      return date.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      });
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return '';
+    }
+  };
+  
+  const getEndTime = (startDateString, durationMinutes) => {
+    if (!startDateString || !durationMinutes) return '';
+    
+    try {
+      const startDate = new Date(startDateString);
+      const endDate = new Date(startDate.getTime() + (durationMinutes * 60000));
+      
+      return endDate.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      });
+    } catch (error) {
+      console.error('Error calculating end time:', error);
+      return '';
+    }
   };
 
   if (isLoading) {
@@ -174,8 +325,16 @@ export default function GameDetailScreen() {
   }
   
   const isGameFull = game.playersCurrent >= game.playersNeeded;
-  const spotsLeft = game.playersNeeded - game.playersCurrent;
+  const spotsLeft = Math.max(0, game.playersNeeded - game.playersCurrent);
   const isOrganizer = user && game.organizer && user.id === game.organizer.id;
+  
+  // Debug information
+  console.log("Game detail debug info:");
+  console.log("- playersCurrent:", game.playersCurrent);
+  console.log("- playersNeeded:", game.playersNeeded);
+  console.log("- spotsLeft:", spotsLeft);
+  console.log("- isGameFull:", isGameFull);
+  console.log("- participants:", game.participants?.length || 0);
 
   return (
     <View style={styles.container}>
@@ -188,7 +347,7 @@ export default function GameDetailScreen() {
       <ScrollView>
         <View style={styles.imageContainer}>
           <Image
-            source={game.image}
+            source={game.image_url || getSportImage(game.sport)}
             style={styles.image}
             contentFit="cover"
           />
@@ -218,7 +377,9 @@ export default function GameDetailScreen() {
               contentFit="cover"
             />
             <View style={styles.organizerInfo}>
-              <Text style={styles.organizerName}>Organized by {game.organizer.name}</Text>
+              <View style={styles.organizerNameRow}>
+                <Text style={styles.organizerName}>Organized by {game.organizer.name}</Text>
+              </View>
               <View style={styles.ratingContainer}>
                 <Award size={14} color={colors.primary} />
                 <Text style={styles.ratingText}>{game.organizer.rating}</Text>
@@ -238,7 +399,9 @@ export default function GameDetailScreen() {
             </View>
             <View style={styles.detailItem}>
               <Clock size={20} color={colors.primary} />
-              <Text style={styles.detailText}>{formatTime(game.date)} • {game.duration} mins</Text>
+              <Text style={styles.detailText}>
+                {formatTime(game.date)} to {getEndTime(game.date, game.duration)}
+              </Text>
             </View>
             <View style={styles.detailItem}>
               <MapPin size={20} color={colors.primary} />
@@ -256,10 +419,12 @@ export default function GameDetailScreen() {
             </View>
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About this game</Text>
-            <Text style={styles.description}>{game.description}</Text>
-          </View>
+          {game.description ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>About this game</Text>
+              <Text style={styles.description}>{game.description}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Location</Text>
@@ -275,28 +440,46 @@ export default function GameDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Participants ({game.playersCurrent}/{game.playersNeeded})</Text>
             <View style={styles.participantsContainer}>
-              {game.participants.map((participant) => (
-                <View key={participant.id} style={styles.participantItem}>
-                  <Image
-                    source={participant.avatar}
-                    style={styles.participantAvatar}
-                    contentFit="cover"
-                  />
-                  <Text style={styles.participantName}>{participant.name}</Text>
-                  {participant.isOrganizer && (
+              {game.participants && game.participants.length > 0 ? (
+                game.participants.map((participant) => (
+                  <View key={participant.id} style={styles.participantItem}>
+                    <Image
+                      source={participant.avatar}
+                      style={styles.participantAvatar}
+                      contentFit="cover"
+                    />
+                    <Text style={styles.participantName}>{participant.name}</Text>
+                    {participant.isOrganizer && (
+                      <View style={styles.organizerBadge}>
+                        <Text style={styles.organizerBadgeText}>Organizer</Text>
+                      </View>
+                    )}
+                  </View>
+                ))
+              ) : (
+                // Show organizer if no participants (just created game)
+                game.organizer && (
+                  <View key={game.organizer.id} style={styles.participantItem}>
+                    <Image
+                      source={game.organizer.avatar}
+                      style={styles.participantAvatar}
+                      contentFit="cover"
+                    />
+                    <Text style={styles.participantName}>{game.organizer.name}</Text>
                     <View style={styles.organizerBadge}>
                       <Text style={styles.organizerBadgeText}>Organizer</Text>
                     </View>
-                  )}
-                </View>
-              ))}
-              {/* Temporarily commented out empty spot rendering for debugging */}
-              {/* {Array(spotsLeft).fill().map((_, index) => (
+                  </View>
+                )
+              )}
+              
+              {/* Show empty spots */}
+              {spotsLeft > 0 && Array(spotsLeft).fill().map((_, index) => (
                 <View key={`empty-${index}`} style={styles.emptyParticipant}>
                   <Users size={24} color={colors.textLight} />
                   <Text style={styles.emptyParticipantText}>Open Spot</Text>
                 </View>
-              ))} */}
+              ))}
             </View>
           </View>
         </View>
@@ -488,11 +671,12 @@ const styles = StyleSheet.create({
   participantsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
+    marginTop: 8,
   },
   participantItem: {
     alignItems: 'center',
-    width: 80,
+    width: 70,
   },
   participantAvatar: {
     width: 60,
@@ -516,22 +700,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.card,
     fontWeight: '500',
-  },
-  emptyParticipant: {
-    width: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-    paddingVertical: 12,
-  },
-  emptyParticipantText: {
-    fontSize: 12,
-    color: colors.textLight,
-    marginTop: 4,
   },
   footer: {
     flexDirection: 'row',
@@ -590,5 +758,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.primary,
     fontWeight: '600',
+  },
+  organizerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
+  emptyParticipant: {
+    width: 70,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    paddingVertical: 12,
+  },
+  emptyParticipantText: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 4,
   },
 });

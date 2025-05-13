@@ -7,6 +7,7 @@ import { colors } from '../constants/colors';
 import { notificationsApi } from '../lib/api';
 import { useAuthStore } from '../store/auth-store';
 import { formatTimeAgo } from '../utils/date';
+import { supabase } from '../lib/supabase';
 
 function NotificationItem({ notification, onPress }) {
   const getIcon = () => {
@@ -111,37 +112,50 @@ export default function NotificationsScreen() {
   }, [fetchNotifications]);
 
   const handleNotificationPress = useCallback(async (notification) => {
-    setNotifications(prev => 
-      prev.map(item => 
+    // First update the local state
+    setNotifications(prev => {
+      const updatedNotifications = prev.map(item => 
         item.id === notification.id ? { ...item, is_read: true } : item
-      )
-    );
+      );
+      
+      // After updating the current notification, check if any remain unread
+      const stillUnreadCount = updatedNotifications.filter(n => !n.is_read).length;
+      console.log(`Notification clicked. Remaining unread: ${stillUnreadCount}`);
+      
+      return updatedNotifications;
+    });
     
-    notificationsApi.markNotificationAsRead(notification.id).then(success => {
+    try {
+      // Mark the notification as read in the database
+      const success = await notificationsApi.markNotificationAsRead(notification.id);
       if (!success) {
         console.warn(`Failed to mark notification ${notification.id} as read via API.`);
       }
-    });
-
+      
+      // Critical: Manually trigger a notification count update regardless of remaining count
+      // This ensures the badge in the home screen updates properly
+      try {
+        const { error } = await supabase.rpc('reset_unread_notification_count', { user_id_param: user.id });
+        if (error) {
+          console.error('Error resetting notification count:', error);
+        } else {
+          console.log('Successfully reset notification count after clicking notification');
+        }
+      } catch (err) {
+        console.error('Failed to reset notification count:', err);
+      }
+      
+      // Navigate if there's a link
     if (notification.link) {
       console.log('Navigating to link:', notification.link)
       router.push(notification.link);
     } else {
       console.log('No link provided for notification:', notification.id);
     }
-  }, [router]);
-
-  const markAllAsRead = useCallback(async () => {
-    if (!user?.id) return;
-    setNotifications(prev => 
-      prev.map(item => ({ ...item, is_read: true }))
-    );
-    const success = await notificationsApi.markAllNotificationsAsRead(user.id);
-    if (!success) {
-       console.warn('Failed to mark all notifications as read via API.');
-       fetchNotifications(); 
+    } catch (error) {
+      console.error('Error handling notification press:', error);
     }
-  }, [user?.id, fetchNotifications]);
+  }, [router, user?.id]);
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
@@ -155,13 +169,6 @@ export default function NotificationsScreen() {
           },
           headerTintColor: colors.primary,
           headerShadowVisible: false,
-          headerRight: () => (
-            unreadCount > 0 ? (
-              <Pressable onPress={markAllAsRead} style={styles.markReadButton}>
-                <Text style={styles.markReadText}>Mark all as read</Text>
-              </Pressable>
-            ) : null
-          ),
         }}
       />
 
@@ -202,14 +209,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  markReadButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  markReadText: {
-    color: colors.primary,
-    fontWeight: '500',
   },
   list: {
     padding: 16,

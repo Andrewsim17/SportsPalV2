@@ -4,8 +4,36 @@ import { MapPin, Calendar, Users, Clock, Share2 } from 'lucide-react-native';
 import { colors } from '../constants/colors';
 
 export default function GameCard({ game, onPress, onJoin, onShare }) {
-  const isFullyBooked = game.playersCurrent >= game.playersNeeded;
-  const spotsLeft = game.playersNeeded - game.playersCurrent;
+  // Count the actual participants
+  const participantCount = game.participants?.length || 0;
+  
+  // Check if organizer is already counted in participants
+  const organizerInParticipants = game.participants?.some(p => 
+    p.isOrganizer || p.player?.id === game.organizer?.id || p.id === game.organizer?.id
+  );
+  
+  // Calculate playersCurrent by checking if organizer is included
+  const playersCurrent = game.playersCurrent || (
+    organizerInParticipants ? participantCount : participantCount + 1
+  );
+  
+  // Ensure playersNeeded is a valid number
+  const playersNeeded = typeof game.playersNeeded === 'number' ? game.playersNeeded : 
+                       (parseInt(game.players_needed) || 4);
+  
+  const isFullyBooked = playersCurrent >= playersNeeded;
+  const spotsLeft = Math.max(0, playersNeeded - playersCurrent);
+
+  // Debug log to help diagnose participant count issues
+  console.log("GameCard player counts:", {
+    id: game.id,
+    title: game.title,
+    participantCount, 
+    organizerInParticipants,
+    playersCurrent,
+    playersNeeded,
+    spotsLeft
+  });
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -14,8 +42,38 @@ export default function GameCard({ game, onPress, onJoin, onShare }) {
   };
   
   const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    if (!dateString) return '';
+    
+    try {
+      const date = new Date(dateString);
+      
+      return date.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      });
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return '';
+    }
+  };
+  
+  const getEndTime = (startDateString, durationMinutes) => {
+    if (!startDateString || !durationMinutes) return '';
+    
+    try {
+      const startDate = new Date(startDateString);
+      const endDate = new Date(startDate.getTime() + (durationMinutes * 60000));
+      
+      return endDate.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      });
+    } catch (error) {
+      console.error('Error calculating end time:', error);
+      return '';
+    }
   };
 
   const handleJoinPress = (e) => {
@@ -45,7 +103,7 @@ export default function GameCard({ game, onPress, onJoin, onShare }) {
           styles.spots,
           isFullyBooked && styles.spotsFull
         ]}>
-          {isFullyBooked ? 'Full' : `${spotsLeft} spots left`}
+          {isFullyBooked ? 'Full' : `${spotsLeft} ${spotsLeft === 1 ? 'spot' : 'spots'} left`}
         </Text>
       </View>
 
@@ -62,11 +120,15 @@ export default function GameCard({ game, onPress, onJoin, onShare }) {
         </View>
         <View style={styles.infoItem}>
           <Clock size={16} color={colors.textLight} />
-          <Text style={styles.infoText}>{formatTime(game.date)} • {game.duration} mins</Text>
+          <Text style={styles.infoText}>
+            {formatTime(game.date)} to {getEndTime(game.date, game.duration)}
+          </Text>
         </View>
         <View style={styles.infoItem}>
           <Users size={16} color={colors.textLight} />
-          <Text style={styles.infoText}>{game.playersCurrent}/{game.playersNeeded}</Text>
+          <Text style={styles.infoText}>
+            {playersCurrent}/{playersNeeded} players
+          </Text>
         </View>
       </View>
 

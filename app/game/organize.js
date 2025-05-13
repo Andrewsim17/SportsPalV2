@@ -77,15 +77,16 @@ export default function OrganizeGameScreen() {
 
     const selectedDate = date || new Date();
     
+    // Create the start time on the selected date
     const finalStartTime = new Date(selectedDate);
     finalStartTime.setHours(start.getHours(), start.getMinutes(), 0, 0);
 
-    const finalEndTime = new Date(selectedDate);
-    finalEndTime.setHours(end.getHours(), end.getMinutes(), 0, 0);
+    // Create the end time
+    const finalEndTime = new Date(end);
     
-    if (finalEndTime <= finalStartTime) {
-        finalEndTime.setDate(finalEndTime.getDate() + 1);
-    }
+    // Since our TimeRangePicker now properly handles next-day times,
+    // we don't need to manually adjust the date here.
+    // The end time is already on the correct day (either same day or next day)
 
     console.log("Setting startTime:", finalStartTime);
     console.log("Setting endTime:", finalEndTime);
@@ -137,11 +138,14 @@ export default function OrganizeGameScreen() {
       return;
     }
 
+    // Create a new Date object to ensure we have the correct date and time
+    const gameDate = new Date(startTime);
+
     const gameData = {
       title,
       description: description || null,
       location,
-      date: startTime.toISOString(),
+      date: gameDate.toISOString(), // Ensure proper ISO format with timezone info
       duration,
       players_needed: parseInt(playersNeeded, 10) || 1,
       price: parseFloat(price) || 0,
@@ -149,7 +153,7 @@ export default function OrganizeGameScreen() {
       level: selectedLevel,
       organizer_id: user.id,
     };
-
+    
     // Add coordinates if available
     if (coordinates) {
       gameData.latitude = coordinates.latitude;
@@ -211,7 +215,7 @@ export default function OrganizeGameScreen() {
             >
               {isCreating ? 
                 <ActivityIndicator size="small" color={colors.primary} /> : 
-              <Check size={24} color={colors.primary} />
+              null
               }
             </Pressable>
           ),

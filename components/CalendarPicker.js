@@ -94,6 +94,20 @@ export default function CalendarPicker({ selectedDate, onSelectDate }) {
            date.getFullYear() === tempDate.getFullYear();
   };
 
+  const isDateInRange = (date) => {
+    if (!date) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to beginning of day for proper comparison
+    const maxDate = new Date();
+    maxDate.setDate(today.getDate() + 14); // Limit to 14 days from today
+    
+    // Normalize comparison date to just date portion (no time)
+    const compareDate = new Date(date);
+    compareDate.setHours(0, 0, 0, 0);
+    
+    return compareDate >= today && compareDate <= maxDate;
+  };
+
   const weeks = generateCalendar();
   const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -144,26 +158,35 @@ export default function CalendarPicker({ selectedDate, onSelectDate }) {
 
                 {weeks.map((week, weekIndex) => (
                   <View key={weekIndex} style={styles.weekRow}>
-                    {week.map((day, dayIndex) => (
-                      <Pressable
-                        key={dayIndex}
-                        style={[
-                          styles.dayCell,
-                          day && isSelected(day) && styles.selectedDay,
-                          day && isToday(day) && styles.today
-                        ]}
-                        onPress={() => day && setTempDate(day)}
-                        disabled={!day}
-                      >
-                        <Text style={[
-                          styles.dayText,
-                          day && isSelected(day) && styles.selectedDayText,
-                          day && isToday(day) && styles.todayText
-                        ]}>
-                          {day ? day.getDate() : ''}
-                        </Text>
-                      </Pressable>
-                    ))}
+                    {week.map((day, dayIndex) => {
+                      const inRange = day && isDateInRange(day);
+                      const isSelectedDay = day && isSelected(day);
+                      const isTodayDay = day && isToday(day);
+                      return (
+                        <Pressable
+                          key={dayIndex}
+                          style={[
+                            styles.dayCell,
+                            // Only apply today style if it's not also selected
+                            isTodayDay && !isSelectedDay && styles.today,
+                            isSelectedDay && styles.selectedDay,
+                            day && !inRange && styles.disabledDay
+                          ]}
+                          onPress={() => day && inRange && setTempDate(day)}
+                          disabled={!day || !inRange}
+                        >
+                          <Text style={[
+                            styles.dayText,
+                            // Only apply today text style if it's not also selected
+                            isTodayDay && !isSelectedDay && styles.todayText,
+                            isSelectedDay && styles.selectedDayText,
+                            day && !inRange && styles.disabledDayText
+                          ]}>
+                            {day ? day.getDate() : ''}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 ))}
 
@@ -286,6 +309,12 @@ const styles = StyleSheet.create({
   todayText: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  disabledDay: {
+    opacity: 0.4,
+  },
+  disabledDayText: {
+    color: colors.textLight,
   },
   modalFooter: {
     flexDirection: 'row',

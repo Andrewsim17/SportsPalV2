@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 import { Clock, TrendingUp, Activity as ActivityIcon, Heart, MessageCircle, Share2, Bell, MessageSquare, Plus, Video, Edit, MapPin } from 'lucide-react-native';
 import { colors } from '@/constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
-import { chatApi, notificationsApi } from '../../lib/api';
+import { chatApi, notificationsApi, activitiesApi } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/auth-store';
 import { formatTimeAgo } from '../../utils/date';
@@ -298,6 +298,19 @@ export default function FeedScreen() {
           fetchUnreadNotificationCount(); 
         }
       )
+      .on('postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}` // Filter for user's notifications
+        },
+        (payload) => {
+          console.log('Notification updated:', payload);
+          // Refetch the count when notifications are marked as read
+          fetchUnreadNotificationCount();
+        }
+      )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           console.log('Realtime notification subscription established!');
@@ -545,7 +558,7 @@ export default function FeedScreen() {
                   </View>
                   <View style={styles.addMenuTextContainer}>
                     <Text style={styles.addMenuTitle}>Record Activity</Text>
-                    <Text style={styles.addMenuDescription}>Log a completed activity</Text>
+                    <Text style={styles.addMenuDescription}>Log an activity or share a quick post</Text>
                   </View>
                 </Pressable>
                 
@@ -559,19 +572,6 @@ export default function FeedScreen() {
                   <View style={styles.addMenuTextContainer}>
                     <Text style={styles.addMenuTitle}>Record Live Activity</Text>
                     <Text style={styles.addMenuDescription}>Track your activity in real-time</Text>
-                  </View>
-                </Pressable>
-                
-                <Pressable 
-                  style={styles.addMenuItem}
-                  onPress={handleQuickPost}
-                >
-                  <View style={[styles.addMenuIcon, { backgroundColor: colors.success }]}>
-                    <MapPin size={20} color={colors.card} />
-                  </View>
-                  <View style={styles.addMenuTextContainer}>
-                    <Text style={styles.addMenuTitle}>Quick Post</Text>
-                    <Text style={styles.addMenuDescription}>Share a quick update</Text>
                   </View>
                 </Pressable>
               </View>

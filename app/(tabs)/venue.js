@@ -7,6 +7,7 @@ import VenueCard from '../../components/VenueCard';
 import SearchBar from '../../components/SearchBar';
 import FilterBar from '../../components/FilterBar';
 import { venuesApi } from '../../lib/api';
+import { processVenueImages } from '../../lib/storage';
 
 const SPORTS = ['All', 'Tennis', 'Basketball', 'Football', 'Badminton', 'Swimming', 'Soccer'];
 
@@ -41,31 +42,28 @@ export default function VenuesScreen() {
       const fetchedVenues = await venuesApi.getVenues(apiFilters);
       console.log('Fetched venues:', fetchedVenues.length);
       
+      // Process images for each venue
       const adaptedVenues = fetchedVenues.map(venue => {
+        // Log the raw image data for debugging
         console.log(`Venue ${venue.id} raw images:`, JSON.stringify(venue.images));
         
+        // Process the images
+        const images = processVenueImages(venue.images);
+        console.log(`Venue ${venue.id} processed images:`, images);
+        
         return {
-          id: venue.id,
-          name: venue.name,
-          images: venue.images || ['https://via.placeholder.com/300/cccccc/ffffff?text=No+Image'],
-          sports: venue.sports || [],
-          rating: 4.5,
-          reviews: Math.floor(Math.random() * 100),
-          location: venue.address || '',
-          city: venue.city || '',
-          distance: 'N/A',
-          pricePerHour: Math.floor(Math.random() * 50) + 20,
-          amenities: venue.amenities || [],
-          availability: 'Check details',
-          courts: [],
+          ...venue,
+          images: images,
+          distance: '2.5 mi', // Placeholder
+          pricePerHour: Math.floor(Math.random() * 50) + 20, // Placeholder
+          availability: 'Available now', // Placeholder
         };
       });
       
       setVenues(adaptedVenues);
-      
-    } catch (err) {
-      console.error("Failed to fetch venues:", err);
-      setError(err.message || 'Failed to load venues');
+    } catch (error) {
+      console.error('Error fetching venues:', error);
+      setError(error.message);
     } finally {
       setIsLoading(false);
     }

@@ -176,12 +176,12 @@ export default function CommunityDetailsScreen() {
           <View style={styles.tabContentContainer}>
             <Text style={styles.sectionTitle}>Description</Text>
             <Text style={styles.descriptionText}>{community?.description || 'No description provided.'}</Text>
-            
-            <View style={styles.infoRow}>
-              <MapPin size={16} color={colors.textLight} />
+              
+              <View style={styles.infoRow}>
+                <MapPin size={16} color={colors.textLight} />
               <Text style={styles.infoText}>{community?.location || 'Location not specified'}</Text>
-            </View>
-            <View style={styles.infoRow}>
+              </View>
+              <View style={styles.infoRow}>
               <Calendar size={16} color={colors.textLight} />
               <Text style={styles.infoText}>Founded {formatDate(community?.founded)}</Text>
             </View>
@@ -195,7 +195,7 @@ export default function CommunityDetailsScreen() {
         return (
           <View style={styles.tabContentContainer}>
              <Text style={styles.emptyTabText}>Upcoming events will be shown here.</Text>
-          </View>
+                      </View>
         );
       case 'members':
         return (
@@ -271,10 +271,10 @@ export default function CommunityDetailsScreen() {
                 <Text style={styles.headerLocation}>{community.location || 'Location N/A'}</Text>
                 <Users size={16} color={colors.card} style={{marginLeft: 12}} />
                 <Text style={styles.headerMembers}>{community.memberCount || 0} members</Text>
-             </View>
+            </View>
           </View>
         </View>
-        
+
         <View style={styles.actionsContainer}>
           <Pressable 
              style={[styles.actionButton, isJoined ? styles.joinedButton : styles.joinButton, isJoining && styles.disabledButton]} 
@@ -288,7 +288,7 @@ export default function CommunityDetailsScreen() {
                   {isJoined ? <UserCheck size={20} color={colors.primary} /> : <UserPlus size={20} color={colors.card} />}
                   <Text style={isJoined ? styles.joinedButtonText : styles.joinButtonText}>
                      {isJoined ? 'Joined' : 'Join Community'}
-                  </Text>
+            </Text>
                </>
             )}
           </Pressable>
@@ -298,29 +298,29 @@ export default function CommunityDetailsScreen() {
           <Pressable style={styles.iconButton} onPress={handleToggleNotifications}>
             {isNotificationsEnabled ? 
               <BellOff size={20} color={colors.primary} /> : 
-              <Bell size={20} color={colors.primary} />
+                <Bell size={20} color={colors.primary} />
             }
-          </Pressable>
+            </Pressable>
            <Pressable style={styles.iconButton} onPress={() => {/* Share logic */}}>
             <Share2 size={20} color={colors.primary} />
           </Pressable>
         </View>
-        
+
         <View style={styles.tabContainer}>
           {['about', 'events', 'members', 'discussions'].map((tab) => (
-            <Pressable 
+          <Pressable 
               key={tab} 
               style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
               onPress={() => setActiveTab(tab)}
             >
               <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                 {tab.charAt(0).toUpperCase() + tab.slice(1)} 
-              </Text>
-            </Pressable>
+            </Text>
+          </Pressable>
           ))}
         </View>
-        
-        {renderTabContent()}
+
+          {renderTabContent()}
         
       </ScrollView>
     </View>
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   headerMembers: {
-     fontSize: 14,
+    fontSize: 14,
     color: colors.card,
     marginLeft: 4,
   },
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
   joinedButton: {
      backgroundColor: colors.primaryLight,
      borderWidth: 1,
-     borderColor: colors.primary,
+    borderColor: colors.primary,
   },
   joinedButtonText: {
     color: colors.primary,
@@ -538,6 +538,6 @@ const styles = StyleSheet.create({
      textAlign: 'center',
      marginTop: 40,
      color: colors.textLight,
-     fontSize: 16,
+    fontSize: 16,
   },
 });

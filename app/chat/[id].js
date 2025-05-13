@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, FlatList, KeyboardAvoidingView, Platform, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Send, AlertCircle } from 'lucide-react-native';
+import { Send, AlertCircle, ChevronLeft } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import { chatApi, profilesApi } from '../../lib/api';
 import { useAuthStore } from '../../store/auth-store';
 import { supabase, TABLES } from '../../lib/supabase';
 
-function Message({ message, currentUserId }) {
+function Message({ message, currentUserId, isLastInGroup }) {
   const isMe = message.sender.id === currentUserId;
 
   const formatTime = (dateString) => {
@@ -26,18 +26,24 @@ function Message({ message, currentUserId }) {
   return (
     <View style={[
       styles.messageContainer,
-      isMe ? styles.myMessage : styles.otherMessage
+      isMe ? styles.myMessage : styles.otherMessage,
+      isLastInGroup && (isMe ? styles.lastMyMessage : styles.lastOtherMessage)
     ]}>
       {!isMe && (
+         <View style={styles.avatarContainer}>
+           {isLastInGroup && (
          <Image 
-            source={message.sender.avatar_url || 'https://via.placeholder.com/60x60.png?text=U'} 
+                source={message.sender.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.sender.name || 'U')}&background=6C5CE7&color=fff`} 
             style={styles.avatar} 
          />
+           )}
+         </View>
       )}
-      <View style={styles.messageContentContainer}>
+      <View style={styles.bubbleContainer}>
       <View style={[
         styles.messageBubble,
-        isMe ? styles.myBubble : styles.otherBubble
+          isMe ? styles.myBubble : styles.otherBubble,
+          isLastInGroup && (isMe ? styles.lastMyBubble : styles.lastOtherBubble)
       ]}>
         <Text style={[
           styles.messageText,
@@ -46,9 +52,11 @@ function Message({ message, currentUserId }) {
               {message.content} 
             </Text>
           </View>
+        {isLastInGroup && (
           <Text style={[styles.messageTime, isMe ? styles.myTime : styles.otherTime]}>
              {formatTime(message.created_at)} 
         </Text>
+        )}
       </View>
     </View>
   );
@@ -64,6 +72,7 @@ export default function ChatRoomScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [headerTitle, setHeaderTitle] = useState('Chat');
+  const [headerImage, setHeaderImage] = useState(null);
   const [isSending, setIsSending] = useState(false);
   
   const flatListRef = useRef();
@@ -83,19 +92,25 @@ export default function ChatRoomScreen() {
 
       const { data: participants, error: pError } = await supabase
           .from(TABLES.CHAT_PARTICIPANTS)
-          .select('user:profiles(id, name)')
+          .select('user:profiles(id, name, avatar_url)')
           .eq('chat_id', chatId)
           .neq('user_id', user.id)
           .limit(1);
       if (pError) console.error("Error fetching participant:", pError);
       if (participants && participants.length > 0) {
           setHeaderTitle(participants[0].user?.name || 'Chat');
+          setHeaderImage(participants[0].user?.avatar_url);
       } else {
           setHeaderTitle('Chat'); 
       }
       
       // Mark chat as read when the user opens it
-      await chatApi.markChatAsRead(chatId, user.id);
+      const success = await chatApi.markChatAsRead(chatId, user.id);
+      if (!success) {
+        console.warn('Failed to mark chat as read on initial load');
+      } else {
+        console.log('Chat marked as read successfully on initial load');
+      }
       
     } catch (err) {
       console.error('Failed to fetch initial chat data:', err);
@@ -194,7 +209,18 @@ export default function ChatRoomScreen() {
     }
   };
 
-  const renderMessage = ({ item }) => <Message message={item} currentUserId={user?.id} />;
+  // Group messages by sender
+  const renderMessage = ({ item, index }) => {
+    // A message is considered the last in its group if:
+    // 1. It's the very last message in the chat
+    // 2. The next message is from a different sender
+    // 3. The next message is more than 2 minutes apart
+    const isLastInGroup = index === messages.length - 1 || 
+                      messages[index + 1]?.sender_id !== item.sender_id ||
+                      (new Date(messages[index + 1]?.created_at).getTime() - new Date(item.created_at).getTime() > 2 * 60 * 1000);
+    
+    return <Message message={item} currentUserId={user?.id} isLastInGroup={isLastInGroup} />;
+  };
 
   useEffect(() => {
     if (flatListRef.current && messages.length > 0) {
@@ -223,14 +249,26 @@ export default function ChatRoomScreen() {
   }
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
+    <View style={styles.container}>
       <Stack.Screen 
         options={{
-          title: headerTitle,
+          headerTitle: () => (
+            <View style={styles.headerTitleContainer}>
+              {headerImage && (
+                <Image 
+                  source={headerImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(headerTitle)}&background=6C5CE7&color=fff`} 
+                  style={styles.headerAvatar}
+                  contentFit="cover"
+                />
+              )}
+              <Text style={styles.headerTitle}>{headerTitle}</Text>
+            </View>
+          ),
+          headerLeft: () => (
+            <Pressable onPress={() => router.back()} style={styles.headerButton}>
+              <ChevronLeft size={24} color={colors.primary} />
+            </Pressable>
+          ),
           headerStyle: {
             backgroundColor: colors.card,
           },
@@ -239,6 +277,11 @@ export default function ChatRoomScreen() {
         }}
       />
 
+      <KeyboardAvoidingView 
+        style={styles.chatContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -253,26 +296,30 @@ export default function ChatRoomScreen() {
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
-          placeholder="Type a message..."
+            placeholder="Message..."
           placeholderTextColor={colors.textLight}
           value={message}
           onChangeText={setMessage}
           multiline
           editable={!isSending}
         />
-        <Pressable onPress={handleSendMessage} disabled={isSending || !message.trim()}> 
+          <Pressable 
+            onPress={handleSendMessage} 
+            disabled={isSending || !message.trim()}
+            style={styles.sendButtonContainer}
+          > 
            {isSending ? (
-              <ActivityIndicator size="small" color={colors.primary} style={styles.sendButton} />
+                <ActivityIndicator size="small" color={colors.card} />
            ) : (
           <Send 
-            size={24} 
-                 color={message.trim().length > 0 ? colors.primary : colors.inactive}
-            style={styles.sendButton}
+                size={20} 
+                color={colors.card}
           />
            )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -280,6 +327,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 10,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  headerButton: {
+    padding: 8,
+  },
+  chatContainer: {
+    flex: 1,
   },
   centeredContainer: {
     flex: 1,
@@ -305,7 +373,7 @@ const styles = StyleSheet.create({
      fontWeight: '600',
   },
   messagesList: {
-    padding: 16,
+    padding: 10,
     flexGrow: 1,
   },
    emptyListText: {
@@ -315,52 +383,61 @@ const styles = StyleSheet.create({
      fontSize: 16,
   },
   messageContainer: {
-    marginVertical: 8,
+    marginVertical: 2,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    width: '100%',
   },
   myMessage: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row-reverse',
+    justifyContent: 'flex-end',
   },
   otherMessage: {
-    alignSelf: 'flex-start',
+    justifyContent: 'flex-start',
   },
-   avatar: {
+  lastMyMessage: {
+    marginBottom: 12,
+  },
+  lastOtherMessage: {
+    marginBottom: 12,
+  },
+  avatarContainer: {
       width: 36,
-      height: 36,
-      borderRadius: 18,
-      marginRight: 8,
-      marginBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginRight: 4,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
    },
-  messageContentContainer: {
+  bubbleContainer: {
      maxWidth: '80%',
-     alignItems: 'flex-start',
-  },
-  myMessageTimeAlignment: {
-    alignItems: 'flex-end',
-  },
-  otherMessageTimeAlignment: {
-    alignItems: 'flex-start',
+    flexDirection: 'column',
   },
   messageBubble: {
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    borderRadius: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     maxWidth: '100%',
   },
   myBubble: {
     backgroundColor: colors.primary,
-    borderBottomRightRadius: 5,
+    borderBottomRightRadius: 4,
+    alignSelf: 'flex-end',
   },
   otherBubble: {
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    borderBottomLeftRadius: 5,
+    borderBottomLeftRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  lastMyBubble: {
+    borderBottomRightRadius: 18,
+  },
+  lastOtherBubble: {
+    borderBottomLeftRadius: 18,
   },
   messageText: {
-    fontSize: 16,
+    fontSize: 15,
   },
   myMessageText: {
     color: colors.card,
@@ -369,17 +446,15 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   messageTime: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textLight,
-    marginTop: 4,
+    marginTop: 2,
   },
   myTime: {
      alignSelf: 'flex-end',
-     marginRight: 5,
   },
   otherTime: {
      alignSelf: 'flex-start',
-     marginLeft: 5,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -401,7 +476,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  sendButton: {
-    padding: 8,
+  sendButtonContainer: {
+    backgroundColor: colors.primary,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

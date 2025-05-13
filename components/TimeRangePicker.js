@@ -3,28 +3,62 @@ import { View, Text, StyleSheet, Pressable, Modal, TouchableWithoutFeedback, Fla
 import { Clock, ChevronDown, X, Check } from 'lucide-react-native';
 import { colors } from '../constants/colors';
 
-// Generate time slots in 30-minute increments
+// Generate time slots in 15-minute increments (48 hours: from 12am today to 12am two days later)
 const generateTimeSlots = () => {
   const slots = [];
-  for (let hour = 6; hour < 23; hour++) {
-    for (let minute = 0; minute < 60; minute += 30) {
-      const time = new Date();
+  const today = new Date();
+  
+  // Current day: midnight (0:00) to 11:45 PM (23:45)
+  for (let hour = 0; hour < 24; hour++) {
+    for (let minute = 0; minute < 60; minute += 15) {
+      const time = new Date(today);
       time.setHours(hour, minute, 0, 0);
-      slots.push(time);
+      slots.push({
+        time,
+        isNextDay: false
+      });
     }
   }
+  
+  // Next day: midnight (0:00) to 11:45 PM (23:45)
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  for (let hour = 0; hour < 24; hour++) {
+    for (let minute = 0; minute < 60; minute += 15) {
+      const time = new Date(tomorrow);
+      time.setHours(hour, minute, 0, 0);
+      slots.push({
+        time,
+        isNextDay: true
+      });
+    }
+  }
+  
   return slots;
 };
 
-const TIME_SLOTS = generateTimeSlots();
+// Generate all time slots but we'll filter them when showing
+const ALL_TIME_SLOTS = generateTimeSlots();
 
-export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange }) {
+export default function TimeRangePicker({ initialStartTime, initialEndTime, onSelectTimeRange }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectingStart, setSelectingStart] = useState(true);
-  const [tempStartTime, setTempStartTime] = useState(null);
-  const [tempEndTime, setTempEndTime] = useState(null);
+  const [tempStartTime, setTempStartTime] = useState(initialStartTime || null);
+  const [tempEndTime, setTempEndTime] = useState(initialEndTime || null);
+  const [startTime, setStartTime] = useState(initialStartTime || null);
+  const [endTime, setEndTime] = useState(initialEndTime || null);
+  const [showNextDay, setShowNextDay] = useState(false);
   
-  // console.log("TimeRangePicker received props - startTime:", startTime, "endTime:", endTime); // REMOVED
+  // Filter time slots based on what we're selecting
+  const TIME_SLOTS = ALL_TIME_SLOTS.filter(slot => {
+    if (selectingStart) {
+      // For start time, only show current day
+      return !slot.isNextDay;
+    } else {
+      // For end time, show either current day or next day based on toggle
+      return slot.isNextDay === showNextDay;
+    }
+  });
 
   // Effect to handle logic after temporary times are set
   useEffect(() => {
@@ -33,17 +67,18 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
       // Check if tempEndTime needs to be cleared or adjusted if it's now invalid
       if (tempEndTime && tempEndTime <= tempStartTime) {
         setTempEndTime(null);
-        // console.log("Cleared tempEndTime because it was <= new tempStartTime"); // REMOVED
       }
-      // console.log("useEffect: Start time set, switching to select end time."); // REMOVED
       setSelectingStart(false);
+      
+      // If it's a late night time (after 9 PM), default to showing next day options
+      const hour = tempStartTime.getHours();
+      setShowNextDay(hour >= 21);
     }
   }, [tempStartTime]); // Run only when tempStartTime changes
 
   useEffect(() => {
     // If we just selected an end time, and it's valid, confirm
     if (!selectingStart && tempEndTime && tempStartTime && tempEndTime.getTime() > tempStartTime.getTime()) {
-      // console.log("useEffect: End time set and valid, calling handleConfirm."); // REMOVED
       handleConfirm(); 
     }
   }, [tempEndTime]); // Run only when tempEndTime changes
@@ -53,26 +88,37 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
     setModalVisible(!modalVisible);
     if (!modalVisible) {
       // Reset temporary state when opening modal
-      // console.log("Modal opening: Resetting temp times from props:", startTime, endTime); // REMOVED
       setTempStartTime(startTime || null);
       setTempEndTime(endTime || null);
       setSelectingStart(true); // Always start by selecting start time
+      setShowNextDay(false); // Default to current day
     }
   };
 
   // Simplified: Just sets the appropriate temp state
-  const handleTimeSelect = (time) => {
-    // console.log(`handleTimeSelect: Time=${time?.toISOString()}, selectingStart=${selectingStart}`); // REMOVED
+  const handleTimeSelect = (timeObj) => {
+    const time = timeObj.time;
+    
     if (selectingStart) {
       setTempStartTime(time);
       // Logic moved to useEffect
     } else {
+      // For end time
+      let adjustedTime = new Date(time);
+      
+      // If selecting from next day options, make sure it's tomorrow
+      if (showNextDay) {
+        const tomorrow = new Date(tempStartTime);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        adjustedTime = new Date(tomorrow);
+        adjustedTime.setHours(time.getHours(), time.getMinutes(), 0, 0);
+      }
+      
       // Check if valid before setting, alert if not
-      if (tempStartTime && time.getTime() > tempStartTime.getTime()) {
-        setTempEndTime(time);
+      if (tempStartTime && adjustedTime.getTime() > tempStartTime.getTime()) {
+        setTempEndTime(adjustedTime);
         // Confirmation logic moved to useEffect
       } else {
-        // console.log("Invalid end time selected (<= start time)."); // REMOVED
         alert('End time must be after start time');
       }
     }
@@ -81,11 +127,11 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
   const handleConfirm = () => {
     // Ensure we have valid times before calling back
     if (tempStartTime && tempEndTime && tempEndTime.getTime() > tempStartTime.getTime()) {
-      // console.log("TimeRangePicker handleConfirm - Calling onSelectTimeRange with:", tempStartTime, tempEndTime); // REMOVED
+      setStartTime(tempStartTime);
+      setEndTime(tempEndTime);
       onSelectTimeRange(tempStartTime, tempEndTime);
       toggleModal(); // Close modal only on successful confirm
     } else {
-        // console.log("handleConfirm called but times invalid:", tempStartTime, tempEndTime); // REMOVED
         // Optionally alert the user if they press the explicit confirm button with invalid times
         if (!selectingStart) { // Only show alert if trying to confirm end time
             alert('Please select a valid end time that is after the start time.')
@@ -98,25 +144,58 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
-  const isTimeSelected = (time) => {
-    if (!time) return false;
+  const isTimeSelected = (timeObj) => {
+    if (!timeObj) return false;
+    const time = timeObj.time;
     
     if (selectingStart && tempStartTime) {
       return time.getHours() === tempStartTime.getHours() && 
              time.getMinutes() === tempStartTime.getMinutes();
     } else if (!selectingStart && tempEndTime) {
-      return time.getHours() === tempEndTime.getHours() && 
-             time.getMinutes() === tempEndTime.getMinutes();
+      // For end time, need to consider if it's on the next day
+      const compareHours = tempEndTime.getHours();
+      const compareMinutes = tempEndTime.getMinutes();
+      
+      const isNextDayEndTime = isEndTimeOnNextDay();
+      
+      if (timeObj.isNextDay === isNextDayEndTime) {
+        return time.getHours() === compareHours && 
+               time.getMinutes() === compareMinutes;
+      }
     }
     
     return false;
   };
 
-  const isTimeDisabled = (time) => {
+  const isTimeDisabled = (timeObj) => {
     if (!selectingStart && tempStartTime) {
+      const time = timeObj.time;
+      
+      // If viewing current day end times
+      if (!showNextDay) {
+        // Current day end times before or equal to start time are disabled
       return time <= tempStartTime;
+      }
+      
+      // On next day, no times are disabled
+      return false;
     }
     return false;
+  };
+  
+  const isEndTimeOnNextDay = () => {
+    if (!tempStartTime || !tempEndTime) return false;
+    
+    // Check if end date is a different day than start date
+    return (
+      tempEndTime.getDate() !== tempStartTime.getDate() ||
+      tempEndTime.getMonth() !== tempStartTime.getMonth() ||
+      tempEndTime.getFullYear() !== tempStartTime.getFullYear()
+    );
+  };
+  
+  const toggleDayView = () => {
+    setShowNextDay(!showNextDay);
   };
 
   return (
@@ -125,7 +204,7 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
         <Clock size={20} color={colors.primary} />
         <Text style={styles.timeText}>
           {startTime && endTime 
-            ? `${formatTime(startTime)} - ${formatTime(endTime)}`
+            ? `${formatTime(startTime)} - ${formatTime(endTime)}${isEndTimeOnNextDay() ? ' (next day)' : ''}`
             : 'Select Time Range'}
         </Text>
         <ChevronDown size={20} color={colors.text} />
@@ -155,9 +234,29 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
                     Select when your activity starts
                   </Text>
                 ) : (
+                  <View>
                   <Text style={styles.instructionText}>
                     Select when your activity ends
                   </Text>
+                    <View style={styles.dayToggleContainer}>
+                      <Pressable 
+                        style={[styles.dayToggleButton, !showNextDay && styles.dayToggleButtonActive]} 
+                        onPress={() => setShowNextDay(false)}
+                      >
+                        <Text style={[styles.dayToggleText, !showNextDay && styles.dayToggleTextActive]}>
+                          Same Day
+                        </Text>
+                      </Pressable>
+                      <Pressable 
+                        style={[styles.dayToggleButton, showNextDay && styles.dayToggleButtonActive]} 
+                        onPress={() => setShowNextDay(true)}
+                      >
+                        <Text style={[styles.dayToggleText, showNextDay && styles.dayToggleTextActive]}>
+                          Next Day
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
                 )}
 
                 <FlatList
@@ -171,7 +270,6 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
                         isTimeDisabled(item) && styles.disabledTimeItem
                       ]}
                       onPress={() => {
-                        // console.log(`Time slot pressed: ${formatTime(item)}, selectingStart: ${selectingStart}, isDisabled: ${isTimeDisabled(item)}`); // REMOVED
                         if (!isTimeDisabled(item)) {
                           handleTimeSelect(item);
                         }
@@ -183,7 +281,7 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
                         isTimeSelected(item) && styles.selectedTimeItemText,
                         isTimeDisabled(item) && styles.disabledTimeItemText
                       ]}>
-                        {formatTime(item)}
+                        {formatTime(item.time)}
                       </Text>
                       {isTimeSelected(item) && (
                         <Check size={20} color={colors.card} />
@@ -196,8 +294,8 @@ export default function TimeRangePicker({ startTime, endTime, onSelectTimeRange 
                 {!selectingStart && (
                   <View style={styles.modalFooter}>
                     <Pressable style={styles.backButton} onPress={() => {
-                        // console.log("Back button pressed"); // REMOVED
                         setSelectingStart(true);
+                        setShowNextDay(false);
                     }}>
                       <Text style={styles.backButtonText}>Back</Text>
                     </Pressable>
@@ -267,7 +365,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textLight,
     padding: 16,
+    paddingBottom: 8,
     textAlign: 'center',
+  },
+  dayToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  dayToggleButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dayToggleButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dayToggleText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  dayToggleTextActive: {
+    color: colors.card,
+    fontWeight: '500',
   },
   timeList: {
     maxHeight: 400,

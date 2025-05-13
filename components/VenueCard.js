@@ -1,16 +1,30 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { MapPin, Star } from 'lucide-react-native';
+import { MapPin } from 'lucide-react-native';
 import { colors } from '../constants/colors';
 
 export default function VenueCard({ venue, onPress }) {
+  const [imageError, setImageError] = useState(false);
+  
+  // Log full venue data 
+  console.log("VenueCard received venue:", JSON.stringify(venue));
+  
   // Determine the image source, using the first image or a placeholder
-  const imageSource = venue?.images && venue.images.length > 0 
+  const fallbackImage = 'https://picsum.photos/300/200?text=No+Image';
+  const imageUrl = venue?.images && venue.images.length > 0 
     ? venue.images[0] 
-    : 'https://via.placeholder.com/300/cccccc/ffffff?text=No+Image';
-  // console.log(`VenueCard determined imageSource:`, imageSource);
-
+    : fallbackImage;
+  
+  console.log(`VenueCard loading image:`, imageUrl);
+  
+  // The image source to use (either the venue image or fallback if there was an error)
+  const imageSource = { uri: imageError ? fallbackImage : imageUrl };
+  
+  // Create a detailed location string
+  const detailedLocation = `${venue.address || ''}, ${venue.city || ''}, ${venue.state || ''}`.trim();
+  const locationDisplay = detailedLocation || 'No location data';
+  
   return (
     <Pressable 
       style={styles.card}
@@ -20,34 +34,36 @@ export default function VenueCard({ venue, onPress }) {
         source={imageSource}
         style={styles.image}
         contentFit="cover"
+        transition={300}
+        onError={(e) => {
+          console.error('Image failed to load:', imageUrl, e.nativeEvent);
+          setImageError(true);
+        }}
+        placeholder={{ uri: fallbackImage }}
+        recyclingKey={imageUrl}
       />
       
       <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.name}>{venue.name}</Text>
-          <View style={styles.rating}>
-            <Star size={16} color={colors.primary} fill={colors.primary} />
-            <Text style={styles.ratingText}>{venue.rating}</Text>
-          </View>
+        <Text style={styles.name}>{venue.name}</Text>
+        
+        <View style={styles.location}>
+          <MapPin size={14} color={colors.primary} style={styles.locationIcon} />
+          <Text style={styles.locationText} numberOfLines={2}>{locationDisplay}</Text>
         </View>
-
-        <View style={styles.sportsContainer}>
-          {venue.sports.map((sport) => (
-            <View key={sport} style={styles.sportTag}>
-              <Text style={styles.sportText}>{sport}</Text>
+        
+        <View style={styles.sports}>
+          {venue.sports && venue.sports.length > 0 ? (
+            venue.sports.slice(0, 3).map((sport, index) => (
+              <View key={index} style={styles.sport}>
+                <Text style={styles.sportText}>{sport}</Text>
+              </View>
+            ))
+          ) : (
+            <View style={styles.sport}>
+              <Text style={styles.sportText}>No sports</Text>
             </View>
-          ))}
+          )}
         </View>
-
-        <View style={styles.infoContainer}>
-          <View style={styles.infoItem}>
-            <MapPin size={16} color={colors.textLight} />
-            <Text style={styles.infoText}>{venue.distance}</Text>
-          </View>
-          <Text style={styles.price}>${venue.pricePerHour}/hour</Text>
-        </View>
-
-        <Text style={styles.availability}>{venue.availability}</Text>
       </View>
     </Pressable>
   );
@@ -72,34 +88,34 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
   name: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.text,
-    flex: 1,
+    marginBottom: 8,
   },
-  rating: {
+  location: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginBottom: 12,
   },
-  ratingText: {
+  locationIcon: {
+    marginTop: 3,
+  },
+  locationText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
+    color: colors.text,
+    flex: 1,
+    lineHeight: 20,
   },
-  sportsContainer: {
+  sports: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 12,
   },
-  sportTag: {
+  sport: {
     backgroundColor: colors.primaryLight,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -108,31 +124,6 @@ const styles = StyleSheet.create({
   sportText: {
     color: colors.card,
     fontSize: 12,
-    fontWeight: '500',
-  },
-  infoContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  infoText: {
-    fontSize: 14,
-    color: colors.textLight,
-  },
-  price: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  availability: {
-    fontSize: 14,
-    color: colors.success,
     fontWeight: '500',
   },
 });

@@ -6,9 +6,9 @@ import { colors } from '../../constants/colors';
 import { chatApi } from '../../lib/api';
 import { useAuthStore } from '../../store/auth-store';
 import { supabase, TABLES } from '../../lib/supabase';
-import { AlertCircle } from 'lucide-react-native';
+import { AlertCircle, MessageSquare } from 'lucide-react-native';
 
-function ChatItem({ chat }) {
+function ChatItem({ chat, currentUserId }) {
   const router = useRouter();
 
   const formatTimeAgo = (dateString) => {
@@ -34,36 +34,46 @@ function ChatItem({ chat }) {
 
   const lastMessageText = chat.lastMessage?.content || 'No messages yet';
   const lastMessageTime = formatTimeAgo(chat.lastMessage?.created_at);
-  const isUnread = false;
+  
+  // Find my participant record to check if there are unread messages
+  const myParticipant = chat.participants?.find(p => p.user_id === currentUserId);
+  const lastReadAt = myParticipant?.last_read_at ? new Date(myParticipant.last_read_at) : null;
+  const lastMessageAt = chat.lastMessage?.created_at ? new Date(chat.lastMessage.created_at) : null;
+  
+  // Message is unread if:
+  // 1. There is a last message (chat is not empty)
+  // 2. The last message is not from the current user
+  // 3. Either last_read_at is null or the last message is newer than last_read_at
+  const isUnread = lastMessageAt && 
+                  chat.lastMessage?.sender_id !== currentUserId &&
+                  (!lastReadAt || lastMessageAt > lastReadAt);
+
+  const handlePress = () => {
+    router.push(`/chat/${chat.id}`);
+  };
 
   return (
-    <Pressable 
-      style={styles.chatItem}
-      onPress={() => router.push(`/chat/${chat.id}`)}
-    >
-      <View style={styles.avatarContainer}>
-        <Image 
-          source={chat.chatImage || 'https://via.placeholder.com/100x100.png?text=Chat'}
-          style={styles.avatar} 
-        />
-      </View>
-      
-      <View style={styles.chatInfo}>
+    <Pressable style={styles.chatItem} onPress={handlePress}>
+      <Image
+        source={chat.chatImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.chatName || 'Chat')}&background=6C5CE7&color=fff`}
+        style={styles.avatar}
+        contentFit="cover"
+      />
+      <View style={styles.chatDetails}>
         <View style={styles.chatHeader}>
-          <Text style={styles.userName}>{chat.chatName || 'Chat'}</Text>
-          <Text style={styles.messageTime}>{lastMessageTime}</Text>
+          <Text style={[styles.chatName, isUnread && styles.boldText]}>{chat.chatName || 'Chat'}</Text>
+          <Text style={styles.timestamp}>{lastMessageTime}</Text>
         </View>
-        
-        <View style={styles.messagePreview}>
+        <View style={styles.chatPreview}>
           <Text 
-            style={[
-              styles.messageText,
-              isUnread && styles.unreadMessage
-            ]}
+            style={[styles.previewText, isUnread && styles.boldText]} 
             numberOfLines={1}
           >
-            {lastMessageText}
+            {chat.lastMessage?.sender_id === currentUserId ? 'You: ' : ''}{lastMessageText}
           </Text>
+          {isUnread && (
+            <View style={styles.unreadIndicator} />
+          )}
         </View>
       </View>
     </Pressable>
@@ -130,22 +140,14 @@ export default function ChatScreen() {
     };
   }, [user, fetchChats]);
 
+  const renderChatItem = useCallback(({ item }) => (
+    <ChatItem chat={item} currentUserId={user?.id} />
+  ), [user?.id]);
+
   if (isLoading) {
     return (
-       <View style={styles.centeredContainer}>
-         <ActivityIndicator size="large" color={colors.primary} />
-       </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centeredContainer}>
-        <AlertCircle size={40} color={colors.danger} style={{ marginBottom: 10 }}/>
-        <Text style={styles.errorText}>{error}</Text>
-        <Pressable onPress={fetchChats} style={styles.retryButton}>
-           <Text style={styles.retryButtonText}>Try Again</Text>
-         </Pressable>
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -162,14 +164,26 @@ export default function ChatScreen() {
           headerShadowVisible: false,
         }}
       />
-
-      <FlatList
-        data={chatRooms}
-        renderItem={({ item }) => <ChatItem chat={item} />}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={<Text style={styles.emptyListText}>No chats yet.</Text>}
-      />
+      
+      {error ? (
+        <View style={styles.centered}>
+          <AlertCircle size={32} color={colors.danger} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : chatRooms.length === 0 ? (
+        <View style={styles.centered}>
+          <MessageSquare size={50} color={colors.primary} style={styles.emptyIcon} />
+          <Text style={styles.emptyText}>No messages yet</Text>
+          <Text style={styles.emptySubtext}>Start chatting with players to coordinate games</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={chatRooms}
+          renderItem={renderChatItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+        />
+      )}
     </View>
   );
 }
@@ -179,7 +193,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  centeredContainer: {
+  centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -191,55 +205,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-   retryButton: {
-     backgroundColor: colors.primary,
-     paddingVertical: 10,
-     paddingHorizontal: 20,
-     borderRadius: 8,
-  },
-  retryButtonText: {
-     color: colors.card,
-     fontSize: 16,
-     fontWeight: '600',
-  },
-  list: {
-    padding: 16,
-  },
-  emptyListText: {
-     textAlign: 'center',
-     marginTop: 50,
-     color: colors.textLight,
-     fontSize: 16,
-  },
   chatItem: {
     flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
     alignItems: 'center',
   },
-  avatarContainer: {
-    position: 'relative',
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     marginRight: 12,
   },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  onlineIndicator: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.success,
-    borderWidth: 2,
-    borderColor: colors.card,
-  },
-  chatInfo: {
+  chatDetails: {
     flex: 1,
   },
   chatHeader: {
@@ -248,42 +228,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  userName: {
+  chatName: {
     fontSize: 16,
-    fontWeight: '600',
     color: colors.text,
   },
-  messageTime: {
+  boldText: {
+    fontWeight: '600',
+  },
+  timestamp: {
     fontSize: 12,
     color: colors.textLight,
   },
-  messagePreview: {
+  chatPreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  messageText: {
+  previewText: {
     fontSize: 14,
     color: colors.textLight,
     flex: 1,
     marginRight: 5,
   },
-  unreadMessage: {
-    color: colors.text,
-    fontWeight: '500',
-  },
   unreadIndicator: {
     backgroundColor: colors.primary,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 4,
   },
-  unreadCount: {
-    color: colors.card,
-    fontSize: 12,
+  listContainer: {
+    flexGrow: 1,
+  },
+  emptyIcon: {
+    marginBottom: 12,
+  },
+  emptyText: {
+    fontSize: 18,
     fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    textAlign: 'center',
+    color: colors.textLight,
+    fontSize: 14,
+    paddingHorizontal: 32,
   },
 });
