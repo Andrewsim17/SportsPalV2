@@ -75,14 +75,14 @@ function RootLayoutNav({ isAuthenticated }) {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
         <Stack.Screen name="auth" options={{ headerShown: false }} />
-        <Stack.Screen name="profile" options={{ headerShown: true }} />
-        <Stack.Screen name="settings" options={{ headerShown: true }} />
+        <Stack.Screen name="profile" options={{ headerShown: false }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="game" options={{ headerShown: false }} />
         <Stack.Screen name="venue" options={{ headerShown: false }} />
         <Stack.Screen name="chat" options={{ headerShown: false }} />
         <Stack.Screen name="activity" options={{ headerShown: false }} />
         <Stack.Screen name="player" options={{ headerShown: false }} />
-        <Stack.Screen name="community" options={{ headerShown: true }} />
+        <Stack.Screen name="community" options={{ headerShown: false }} />
       </Stack>
     </ErrorBoundary>
   );

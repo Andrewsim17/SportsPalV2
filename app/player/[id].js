@@ -273,7 +273,8 @@ export default function PlayerDetailsScreen() {
             style={[
               styles.followButton, 
                     isFollowing && styles.followingButton,
-                    isFollowLoading && styles.disabledButton
+              isFollowLoading && styles.disabledButton,
+              !isFollowing && styles.fullWidthButton
                  ]}
                  onPress={handleFollowToggle}
                  disabled={isFollowLoading}
@@ -293,6 +294,7 @@ export default function PlayerDetailsScreen() {
             </Text>
           </Pressable>
           
+          {isFollowing && (
           <Pressable 
             style={styles.messageButton}
             onPress={handleMessage}
@@ -300,6 +302,7 @@ export default function PlayerDetailsScreen() {
             <MessageCircle size={20} color={colors.card} />
             <Text style={styles.messageButtonText}>Message</Text>
           </Pressable>
+          )}
         </View>
         )}
 
@@ -565,6 +568,9 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
      opacity: 0.7,
+  },
+  fullWidthButton: {
+    flex: 1,
   },
   bioSection: {
     padding: 16,

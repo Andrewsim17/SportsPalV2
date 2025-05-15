@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Alert } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { 
@@ -24,33 +24,8 @@ import {
 import { colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/auth-store';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const MOCK_ACTIVITIES = [
-  {
-    id: '1',
-    type: 'tennis',
-    title: 'Tennis Practice',
-    date: '2 days ago',
-    duration: 90,
-    likes: 12
-  },
-  {
-    id: '2',
-    type: 'running',
-    title: 'Morning Run',
-    date: '5 days ago',
-    duration: 45,
-    likes: 8
-  },
-  {
-    id: '3',
-    type: 'basketball',
-    title: 'Basketball Game',
-    date: '1 week ago',
-    duration: 120,
-    likes: 15
-  }
-];
+import { activitiesApi } from '../../lib/api';
+import { formatTimeAgo } from '../../utils/date';
 
 const MOCK_TRANSACTIONS = [
   {
@@ -76,61 +51,42 @@ const MOCK_TRANSACTIONS = [
   }
 ];
 
-const SUBSCRIPTION_PLANS = [
-  {
-    id: 'free',
-    name: 'Free',
-    price: 0,
-    features: [
-      'Basic activity tracking',
-      'Join public games',
-      'Limited venue bookings'
-    ]
-  },
-  {
-    id: 'premium',
-    name: 'Premium',
-    price: 9.99,
-    features: [
-      'Advanced activity analytics',
-      'Unlimited venue bookings',
-      'Priority game matching',
-      'No ads',
-      'Exclusive events access'
-    ]
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: 19.99,
-    features: [
-      'All Premium features',
-      'Personal training plans',
-      'Video analysis',
-      'Partner discounts',
-      'VIP support'
-    ]
-  }
-];
-
-function ActivityItem({ activity }) {
+function ActivityItem({ activity, router }) {
   return (
-    <View style={styles.activityItem}>
-      <View style={styles.activityHeader}>
-        <Text style={styles.activityTitle}>{activity.title}</Text>
-        <Text style={styles.activityDate}>{activity.date}</Text>
+    <Pressable 
+      style={styles.activityCard}
+      onPress={() => {
+        if (activity.id) {
+          router.push(`/activity/${activity.id}`);
+        }
+      }}
+    >
+      <View style={styles.activityIconContainer}>
+        <Activity size={20} color={colors.primary} />
       </View>
-      <View style={styles.activityDetails}>
-        <View style={styles.activityDetail}>
-          <Calendar size={16} color={colors.textLight} />
-          <Text style={styles.activityDetailText}>{activity.duration} min</Text>
-        </View>
-        <View style={styles.activityDetail}>
-          <Heart size={16} color={colors.textLight} />
-          <Text style={styles.activityDetailText}>{activity.likes} likes</Text>
+      
+      <View style={styles.activityInfo}>
+        <Text style={styles.activityType}>{activity.title || activity.type || 'Activity'}</Text>
+        <Text style={styles.activityMeta}>{activity.date || formatTimeAgo(activity.created_at)} • {activity.details?.location_name || 'No location'}</Text>
+        <View style={styles.activityDetails}>
+          {activity.details?.duration_min && (
+            <Text style={styles.activityDetail}>
+              {activity.details.duration_min} min
+            </Text>
+          )}
+          {activity.details?.distance_km && (
+            <Text style={styles.activityDetail}>
+              {activity.details.distance_km.toFixed(1)} km
+            </Text>
+          )}
+          <Text style={styles.activityDetail}>
+            {activity.likes_count || (activity.likes && activity.likes.length) || 0} likes
+          </Text>
         </View>
       </View>
-    </View>
+      
+      <ChevronRight size={20} color={colors.textLight} />
+    </Pressable>
   );
 }
 
@@ -164,69 +120,38 @@ function TransactionItem({ transaction }) {
   );
 }
 
-function SubscriptionPlanCard({ plan, isActive, onSelect }) {
-  return (
-    <Pressable 
-      style={[styles.planCard, isActive && styles.activePlanCard]}
-      onPress={() => onSelect(plan)}
-    >
-      <View style={styles.planHeader}>
-        <Text style={styles.planName}>{plan.name}</Text>
-        {isActive && (
-          <View style={styles.currentPlanBadge}>
-            <Text style={styles.currentPlanText}>Current</Text>
-          </View>
-        )}
-      </View>
-      
-      <Text style={styles.planPrice}>
-        ${plan.price}{plan.price > 0 ? '/month' : ''}
-      </Text>
-      
-      <View style={styles.planFeatures}>
-        {plan.features.map((feature, index) => (
-          <View key={index} style={styles.featureItem}>
-            <CheckCircle size={16} color={colors.success} />
-            <Text style={styles.featureText}>{feature}</Text>
-          </View>
-        ))}
-      </View>
-      
-      {!isActive && (
-        <Pressable style={styles.selectPlanButton}>
-          <Text style={styles.selectPlanButtonText}>
-            {plan.price === 0 ? 'Downgrade' : 'Upgrade'}
-          </Text>
-        </Pressable>
-      )}
-    </Pressable>
-  );
-}
-
 export default function ProfileScreen() {
-  const { user, logout, refreshProfile } = useAuthStore();
+  const { user, refreshProfile, addFunds } = useAuthStore();
   const router = useRouter();
   const [showWallet, setShowWallet] = useState(false);
-  const [showSubscription, setShowSubscription] = useState(false);
-  const [activePlan, setActivePlan] = useState(SUBSCRIPTION_PLANS[0]);
+  const [activities, setActivities] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Refresh profile data when screen is focused
+  // Fetch user activities from API
+  const fetchUserActivities = async () => {
+    if (!user?.id) return;
+    
+    setIsLoading(true);
+    try {
+      const userActivities = await activitiesApi.getUserActivities(user.id, 3);
+      console.log('Fetched user activities:', userActivities);
+      setActivities(userActivities || []);
+    } catch (error) {
+      console.error('Failed to fetch user activities:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Refresh profile data and activities when screen is focused
   useEffect(() => {
     refreshProfile();
+    fetchUserActivities();
   }, []);
 
-  const handleLogout = () => {
-    logout();
-    router.replace('/auth/login');
-  };
-
-  const handleEditProfile = () => {
-    router.push('/profile/edit');
-  };
-
-  const handleSelectPlan = (plan) => {
-    // In a real app, this would trigger a payment flow
-    setActivePlan(plan);
+  const handleAddFunds = (amount) => {
+    addFunds(amount);
+    Alert.alert('Success', `${amount} credits added to your wallet`);
   };
 
   const handleRecordActivity = () => {
@@ -249,20 +174,12 @@ export default function ProfileScreen() {
           headerTintColor: colors.primary,
           headerShadowVisible: false,
           headerRight: () => (
-            <View style={styles.headerButtons}>
-              <Pressable 
-                onPress={handleRecordActivity} 
-                style={styles.headerButton}
-              >
-                <Plus size={24} color={colors.primary} />
-              </Pressable>
-              <Pressable 
-                onPress={() => router.push('/settings')} 
-                style={styles.headerButton}
-              >
-                <Settings size={24} color={colors.primary} />
-              </Pressable>
-            </View>
+            <Pressable 
+              onPress={() => router.push('/settings')} 
+              style={styles.headerButton}
+            >
+              <Settings size={24} color={colors.primary} />
+            </Pressable>
           ),
         }}
       />
@@ -305,17 +222,6 @@ export default function ProfileScreen() {
               <Text style={styles.statLabel}>Followers</Text>
             </View>
           </View>
-
-          <View style={styles.actionButtons}>
-            <Pressable style={styles.editButton} onPress={handleEditProfile}>
-              <Edit size={20} color={colors.primary} />
-              <Text style={styles.editButtonText}>Edit Profile</Text>
-            </Pressable>
-            <Pressable style={styles.logoutButton} onPress={handleLogout}>
-              <LogOut size={20} color={colors.danger} />
-              <Text style={styles.logoutButtonText}>Logout</Text>
-            </Pressable>
-          </View>
         </LinearGradient>
 
         <View style={styles.content}>
@@ -334,11 +240,14 @@ export default function ProfileScreen() {
             
             <View style={styles.walletBalance}>
               <Text style={styles.balanceLabel}>Available Balance</Text>
-              <Text style={styles.balanceAmount}>85 credits</Text>
+              <Text style={styles.balanceAmount}>{user.wallet?.balance || 0} credits</Text>
             </View>
             
             <View style={styles.walletActions}>
-              <Pressable style={styles.walletAction}>
+              <Pressable 
+                style={styles.walletAction}
+                onPress={() => handleAddFunds(50)}
+              >
                 <Plus size={16} color={colors.primary} />
                 <Text style={styles.walletActionText}>Add Funds</Text>
               </Pressable>
@@ -348,31 +257,6 @@ export default function ProfileScreen() {
                 <Text style={styles.walletActionText}>Withdraw</Text>
               </Pressable>
             </View>
-          </Pressable>
-
-          {/* Subscription Section */}
-          <Pressable 
-            style={styles.subscriptionCard}
-            onPress={() => setShowSubscription(true)}
-          >
-            <View style={styles.subscriptionHeader}>
-              <View style={styles.subscriptionTitleContainer}>
-                <Star size={20} color={colors.primary} />
-                <Text style={styles.subscriptionTitle}>Subscription</Text>
-              </View>
-              <ChevronRight size={20} color={colors.primary} />
-            </View>
-            
-            <View style={styles.currentPlan}>
-              <Text style={styles.currentPlanLabel}>Current Plan</Text>
-              <View style={styles.planBadge}>
-                <Text style={styles.planBadgeText}>{activePlan.name}</Text>
-              </View>
-            </View>
-            
-            <Text style={styles.subscriptionDescription}>
-              Upgrade to Premium for advanced features and exclusive benefits.
-            </Text>
           </Pressable>
 
           {user.bio ? (
@@ -406,9 +290,14 @@ export default function ProfileScreen() {
           ) : null}
 
           <View style={styles.activitiesContainer}>
-            <Text style={styles.sectionTitle}>Recent Activities</Text>
-            {MOCK_ACTIVITIES.map((activity) => (
-              <ActivityItem key={activity.id} activity={activity} />
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recent Activities</Text>
+              <Pressable onPress={() => router.push(`/profile/activities`)}>
+                <Text style={styles.seeAllText}>See All</Text>
+              </Pressable>
+            </View>
+            {activities.map((activity) => (
+              <ActivityItem key={activity.id} activity={activity} router={router} />
             ))}
           </View>
         </View>
@@ -435,9 +324,15 @@ export default function ProfileScreen() {
 
             <View style={styles.walletBalanceCard}>
               <Text style={styles.walletBalanceLabel}>Available Balance</Text>
-              <Text style={styles.walletBalanceAmount}>85 credits</Text>
+              <Text style={styles.walletBalanceAmount}>{user.wallet?.balance || 0} credits</Text>
               <View style={styles.walletBalanceActions}>
-                <Pressable style={styles.walletBalanceAction}>
+                <Pressable 
+                  style={styles.walletBalanceAction}
+                  onPress={() => {
+                    handleAddFunds(100);
+                    setShowWallet(false);
+                  }}
+                >
                   <Plus size={20} color={colors.card} />
                   <Text style={styles.walletBalanceActionText}>Add Funds</Text>
                 </Pressable>
@@ -456,43 +351,10 @@ export default function ProfileScreen() {
                 </Pressable>
               </View>
 
-              {MOCK_TRANSACTIONS.map(transaction => (
+              {(user.wallet?.transactions || MOCK_TRANSACTIONS).map(transaction => (
                 <TransactionItem key={transaction.id} transaction={transaction} />
               ))}
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Subscription Modal */}
-      <Modal
-        visible={showSubscription}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowSubscription(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Subscription Plans</Text>
-              <Pressable 
-                style={styles.closeButton}
-                onPress={() => setShowSubscription(false)}
-              >
-                <X size={24} color={colors.text} />
-              </Pressable>
-            </View>
-
-            <ScrollView style={styles.plansContainer}>
-              {SUBSCRIPTION_PLANS.map(plan => (
-                <SubscriptionPlanCard 
-                  key={plan.id} 
-                  plan={plan} 
-                  isActive={activePlan.id === plan.id}
-                  onSelect={handleSelectPlan}
-                />
-              ))}
-            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -504,10 +366,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 16,
   },
   headerButton: {
     padding: 8,
@@ -573,40 +431,6 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.card,
     opacity: 0.3,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    marginTop: 24,
-    width: '100%',
-    gap: 12,
-  },
-  editButton: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  editButtonText: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  logoutButton: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  logoutButtonText: {
-    color: colors.danger,
-    fontWeight: '600',
   },
   content: {
     padding: 24,
@@ -778,39 +602,61 @@ const styles = StyleSheet.create({
   activitiesContainer: {
     marginBottom: 24,
   },
-  activityItem: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  activityHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
+  },
+  seeAllText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  activityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
     marginBottom: 8,
   },
-  activityTitle: {
+  activityIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  activityInfo: {
+    flex: 1,
+  },
+  activityType: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
+    marginBottom: 4,
   },
-  activityDate: {
+  activityMeta: {
     fontSize: 14,
     color: colors.textLight,
+    marginBottom: 4,
   },
   activityDetails: {
     flexDirection: 'row',
-    gap: 16,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   activityDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  activityDetailText: {
     fontSize: 14,
-    color: colors.textLight,
+    color: colors.text,
+    backgroundColor: colors.background,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
   },
   modalContainer: {
     flex: 1,
@@ -933,72 +779,5 @@ const styles = StyleSheet.create({
   },
   negativeAmount: {
     color: colors.danger,
-  },
-  plansContainer: {
-    flex: 1,
-  },
-  planCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  activePlanCard: {
-    borderColor: colors.primary,
-    borderWidth: 2,
-  },
-  planHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  planName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  currentPlanBadge: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  currentPlanText: {
-    color: colors.card,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  planPrice: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 16,
-  },
-  planFeatures: {
-    marginBottom: 16,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
-  featureText: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  selectPlanButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-  },
-  selectPlanButtonText: {
-    color: colors.card,
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

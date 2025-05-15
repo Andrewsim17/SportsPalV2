@@ -105,7 +105,7 @@ export default function LandingScreen() {
       />
 
       <View style={styles.header}>
-        <Text style={styles.logo}>SportSync</Text>
+        <Text style={styles.logo}>SportsPal</Text>
         <Link href="/auth/login" asChild>
           <Pressable style={styles.loginButton}>
             <Text style={styles.loginButtonText}>Sign In</Text>
@@ -128,7 +128,7 @@ export default function LandingScreen() {
           return (
             <View key={feature.id} style={[styles.slide, { width }]}>
               <LinearGradient
-                colors={[colors.background, colors.primary]}
+                colors={['white', 'rgba(108, 92, 231, 0.1)']}
                 style={styles.slideBackground}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -166,23 +166,13 @@ export default function LandingScreen() {
       </View>
 
       <View style={styles.footer}>
-        <LinearGradient
-          colors={[colors.primary, colors.primaryLight]}
+        <Pressable 
+          onPress={handleGetStarted} 
           style={styles.getStartedButton}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
         >
-          <Pressable onPress={handleGetStarted} style={styles.getStartedButtonInner}>
-            <Text style={styles.getStartedButtonText}>Get Started</Text>
-            <ArrowRight size={20} color={colors.card} />
-          </Pressable>
-        </LinearGradient>
-        
-        <Link href="/auth/login" asChild>
-          <Pressable style={styles.signInLink}>
-            <Text style={styles.signInLinkText}>Already have an account? Sign In</Text>
-          </Pressable>
-        </Link>
+          <Text style={styles.getStartedButtonText}>Get Started</Text>
+          <ArrowRight size={20} color={colors.card} />
+        </Pressable>
       </View>
     </View>
   );
@@ -191,7 +181,7 @@ export default function LandingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: 'white',
   },
   header: {
     flexDirection: 'row',
@@ -210,16 +200,16 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 24,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.primary,
   },
   loginButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(108, 92, 231, 0.1)',
   },
   loginButtonText: {
-    color: colors.text,
+    color: colors.primary,
     fontWeight: '600',
   },
   carousel: {
@@ -232,14 +222,15 @@ const styles = StyleSheet.create({
   },
   slideBackground: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.8,
+    opacity: 0.05,
   },
   illustrationContainer: {
     width: '100%',
-    height: '50%',
+    height: '45%',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
+    marginTop: -40,
   },
   illustration: {
     width: '100%',
@@ -249,12 +240,13 @@ const styles = StyleSheet.create({
     padding: 32,
     alignItems: 'center',
     width: '100%',
+    marginBottom: 120,
   },
   iconContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(108, 92, 231, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -262,14 +254,13 @@ const styles = StyleSheet.create({
   slideTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.primary,
     marginBottom: 8,
     textAlign: 'center',
   },
   slideDescription: {
     fontSize: 16,
     color: colors.text,
-    opacity: 0.8,
     lineHeight: 24,
     textAlign: 'center',
     paddingHorizontal: 20,
@@ -287,11 +278,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    backgroundColor: 'rgba(108, 92, 231, 0.3)',
     marginHorizontal: 4,
   },
   paginationDotActive: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.primary,
     width: 24,
   },
   footer: {
@@ -303,10 +294,9 @@ const styles = StyleSheet.create({
     right: 0,
   },
   getStartedButton: {
+    backgroundColor: colors.primary,
     borderRadius: 12,
     marginBottom: 16,
-  },
-  getStartedButtonInner: {
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -317,13 +307,5 @@ const styles = StyleSheet.create({
     color: colors.card,
     fontSize: 16,
     fontWeight: '600',
-  },
-  signInLink: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  signInLinkText: {
-    color: colors.text,
-    fontSize: 14,
   },
 });

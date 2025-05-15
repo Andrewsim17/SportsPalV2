@@ -287,6 +287,10 @@ export default function ActivityDetailScreen() {
               <ArrowLeft size={24} color={colors.card} />
             </Pressable>
           ),
+          headerStyle: {
+            backgroundColor: 'transparent',
+          },
+          headerShadowVisible: false,
         }}
       />
 
@@ -454,10 +458,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 20,
-    left: 16,
-    zIndex: 10,
+    marginLeft: 8,
+    marginTop: 8,
   },
   scrollView: {
     flex: 1,

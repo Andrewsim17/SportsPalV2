@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Search, Filter, MapPin, Award, Star, AlertCircle } from 'lucide-react-native';
+import { Search, Filter, MapPin, Award, Star, AlertCircle, Plus, UserPlus, UserCheck } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import { communitiesApi, profilesApi, gamesApi } from '../../lib/api';
 import { useAuthStore } from '../../store/auth-store';
 
 const CATEGORIES = [
   { id: 'communities', name: 'Communities' },
-  { id: 'coaches', name: 'Coaches' },
   { id: 'players', name: 'Players' },
-  { id: 'events', name: 'Events' },
 ];
 
 function CommunityCard({ community, onPress }) {
@@ -39,39 +37,30 @@ function CommunityCard({ community, onPress }) {
   );
 }
 
-function CoachCard({ coach, onPress }) {
-  return (
-    <Pressable style={styles.coachCard} onPress={() => onPress(coach.id)}>
-      <Image 
-        source={coach.image || 'https://via.placeholder.com/150x150.png?text=Coach'}
-        style={styles.coachImage} 
-        contentFit="cover" 
-      />
-      <View style={styles.coachContent}>
-        <Text style={styles.coachName}>{coach.name || 'Coach Name'}</Text>
-        <Text style={styles.coachSport}>{coach.sport || 'Sport N/A'} Coach</Text>
-        
-        <View style={styles.coachMeta}>
-          <View style={styles.ratingContainer}>
-            <Star size={14} color={colors.primary} fill={colors.primary} />
-            <Text style={styles.ratingText}>{coach.rating || 'N/A'} ({coach.reviews || '0'})</Text>
-          </View>
-          <View style={styles.locationContainer}>
-            <MapPin size={14} color={colors.textLight} />
-            <Text style={styles.locationText}>{coach.location || 'Location N/A'}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.coachDetails}>
-          <Text style={styles.coachExperience}>{coach.experience || 'Experience N/A'}</Text>
-          <Text style={styles.coachPrice}>{coach.price || 'Price N/A'}</Text>
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-
 function PlayerCard({ player, onPress }) {
+  const [isFollowing, setIsFollowing] = useState(false);
+  const { user } = useAuthStore();
+  
+  const handleFollow = (e) => {
+    e.stopPropagation(); // Prevent card press
+    
+    if (!user) {
+      Alert.alert('Sign in required', 'Please sign in to follow players');
+      return;
+    }
+    
+    // Toggle following state
+    setIsFollowing(prev => !prev);
+    
+    // Here you would implement the actual follow/unfollow API call
+    // For now, just show an alert
+    if (!isFollowing) {
+      Alert.alert('Success', `You are now following ${player.name}`);
+    } else {
+      Alert.alert('Success', `You have unfollowed ${player.name}`);
+    }
+  };
+
   return (
     <Pressable style={styles.playerCard} onPress={() => onPress(player.id)}>
       <Image 
@@ -80,7 +69,28 @@ function PlayerCard({ player, onPress }) {
         contentFit="cover" 
       />
       <View style={styles.playerContent}>
+        <View style={styles.playerNameRow}>
         <Text style={styles.playerName}>{player.name || 'Player Name'}</Text>
+          <Pressable 
+            style={[
+              styles.followButton, 
+              isFollowing ? styles.followingButton : styles.unfollowButton
+            ]} 
+            onPress={handleFollow}
+          >
+            {isFollowing ? (
+              <UserCheck size={16} color={colors.card} />
+            ) : (
+              <UserPlus size={16} color={colors.primary} />
+            )}
+            <Text style={[
+              styles.followButtonText,
+              isFollowing ? styles.followingButtonText : styles.unfollowButtonText
+            ]}>
+              {isFollowing ? 'Following' : 'Follow'}
+            </Text>
+          </Pressable>
+        </View>
         
         <View style={styles.sportsContainer}>
           {(player.sports && player.sports.length > 0) ? player.sports.map(sport => (
@@ -95,13 +105,12 @@ function PlayerCard({ player, onPress }) {
             <Award size={14} color={colors.primary} />
             <Text style={styles.levelText}>{player.level || 'Level N/A'}</Text>
           </View>
-          <View style={styles.locationContainer}>
-            <MapPin size={14} color={colors.textLight} />
-            <Text style={styles.locationText}>{player.location || 'Location N/A'}</Text>
-          </View>
         </View>
         
-        <Text style={styles.availabilityText}>Available: {player.availability || 'N/A'}</Text>
+        <View style={styles.locationContainer}>
+          <MapPin size={16} color={colors.textLight} />
+          <Text style={styles.locationText}>{player.location || 'Location N/A'}</Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -111,6 +120,7 @@ export default function ExploreScreen() {
   const [selectedCategory, setSelectedCategory] = useState('communities');
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
+  const { user: currentUser } = useAuthStore();
 
   const [communities, setCommunities] = useState([]);
   const [coaches, setCoaches] = useState([]);
@@ -139,34 +149,33 @@ export default function ExploreScreen() {
           }));
           setCommunities(adaptedCommunities);
           break;
-        case 'coaches':
-          const fetchedCoaches = await profilesApi.getProfiles({ is_coach: true });
-          console.log('Fetched Coaches:', fetchedCoaches);
-          const adaptedCoaches = fetchedCoaches.map(p => ({
-            id: p.id,
-            name: p.name,
-            image: p.avatar_url,
-            sport: p.sports?.[0] || 'Sport N/A',
-            rating: p.rating || 'N/A',
-            reviews: p.reviews || '0',
-            location: p.location || 'Location N/A',
-            experience: p.details?.experience || 'Experience N/A',
-            price: p.details?.price_per_hour ? `$${p.details.price_per_hour}/hour` : 'Price N/A'
-          }));
-          setCoaches(adaptedCoaches);
-          break;
         case 'players':
           const fetchedPlayers = await profilesApi.getProfiles({ is_coach: false });
            console.log('Fetched Players:', fetchedPlayers);
-          const adaptedPlayers = fetchedPlayers.map(p => ({
+          
+          // Debug log to check the structure of the first player's data
+          if (fetchedPlayers && fetchedPlayers.length > 0) {
+            console.log('First player data:', JSON.stringify(fetchedPlayers[0], null, 2));
+          }
+          
+          const filteredPlayers = currentUser ? fetchedPlayers.filter(p => p.id !== currentUser.id) : fetchedPlayers;
+          const adaptedPlayers = filteredPlayers.map(p => {
+            // Debug sports data
+            console.log(`Player ${p.name} sports data:`, p.sports);
+            
+            return {
              id: p.id,
              name: p.name,
              image: p.avatar_url,
-             sports: p.sports || [],
+              // Make sure we're properly handling the sports array
+              sports: Array.isArray(p.sports) ? p.sports : 
+                      (typeof p.sports === 'string' ? [p.sports] : []),
              level: p.level || 'Level N/A',
              location: p.location || 'Location N/A',
+              // We're no longer using this, but keeping it in the data model for now
              availability: p.details?.availability || 'N/A'
-          }));
+            };
+          });
           setPlayers(adaptedPlayers);
           break;
         case 'events':
@@ -182,7 +191,7 @@ export default function ExploreScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, currentUser]);
 
   useEffect(() => {
     fetchData();
@@ -190,11 +199,7 @@ export default function ExploreScreen() {
 
   const handleCommunityPress = (id) => {
      console.log("Navigate to community:", id);
-  };
-
-  const handleCoachPress = (id) => {
-     console.log("Navigate to profile:", id);
-     router.push(`/profile/${id}`);
+     router.push(`/community/${id}`);
   };
 
   const handlePlayerPress = (id) => {
@@ -204,6 +209,11 @@ export default function ExploreScreen() {
   
   const handleEventPress = (id) => {
       console.log("Navigate to event/game:", id);
+  };
+
+  const handleCreateCommunity = () => {
+    console.log("Navigate to create community screen");
+    router.push('/community/create');
   };
 
   const renderContent = () => {
@@ -236,18 +246,6 @@ export default function ExploreScreen() {
             ListEmptyComponent={<Text style={styles.emptyListText}>No communities found.</Text>}
           />
         );
-      case 'coaches':
-        return (
-          <FlatList
-            data={coaches}
-            renderItem={({ item }) => (
-              <CoachCard coach={item} onPress={handleCoachPress} />
-            )}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            ListEmptyComponent={<Text style={styles.emptyListText}>No coaches found.</Text>}
-          />
-        );
       case 'players':
         return (
           <FlatList
@@ -271,12 +269,7 @@ export default function ExploreScreen() {
     <View style={styles.container}>
       <Stack.Screen 
         options={{
-          title: 'Explore',
-          headerStyle: {
-            backgroundColor: colors.card,
-          },
-          headerTintColor: colors.primary,
-          headerShadowVisible: false,
+          headerShown: false,
         }}
       />
 
@@ -284,7 +277,7 @@ export default function ExploreScreen() {
         <Search size={20} color={colors.textLight} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search communities, coaches..."
+          placeholder="Search communities, players..."
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholderTextColor={colors.textLight}
@@ -295,11 +288,14 @@ export default function ExploreScreen() {
       </View>
 
       <View style={styles.categoriesContainer}>
-        <FlatList
+        <ScrollView
           horizontal
-          data={CATEGORIES}
-          renderItem={({ item }) => (
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesList}
+        >
+          {CATEGORIES.map(item => (
             <Pressable
+              key={item.id}
               style={[
                 styles.categoryButton,
                 selectedCategory === item.id && styles.categoryButtonActive
@@ -313,14 +309,20 @@ export default function ExploreScreen() {
                 {item.name}
               </Text>
             </Pressable>
-          )}
-          keyExtractor={item => item.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesList}
-        />
+          ))}
+        </ScrollView>
       </View>
 
       {renderContent()}
+      
+      {selectedCategory === 'communities' && (
+      <Pressable 
+        style={styles.floatingActionButton}
+        onPress={handleCreateCommunity}
+      >
+        <Plus size={24} color={colors.card} />
+      </Pressable>
+      )}
     </View>
   );
 }
@@ -421,64 +423,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 20,
   },
-  coachCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    flexDirection: 'row',
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  coachImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginRight: 16,
-  },
-  coachContent: {
-    flex: 1,
-  },
-  coachName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  coachSport: {
-    fontSize: 14,
-    color: colors.primary,
-    marginBottom: 8,
-  },
-  coachMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 14,
-    color: colors.textLight,
-  },
-  coachDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  coachExperience: {
-    fontSize: 14,
-    color: colors.textLight,
-  },
-  coachPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
   playerCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
@@ -500,17 +444,49 @@ const styles = StyleSheet.create({
   playerContent: {
     flex: 1,
   },
+  playerNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   playerName: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 8,
+  },
+  followButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    justifyContent: 'center',
+    gap: 4,
+  },
+  followingButton: {
+    backgroundColor: colors.primary,
+  },
+  unfollowButton: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  followButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  followingButtonText: {
+    color: colors.card,
+  },
+  unfollowButtonText: {
+    color: colors.primary,
   },
   sportsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   sportTag: {
     backgroundColor: colors.primaryLight,
@@ -526,20 +502,26 @@ const styles = StyleSheet.create({
   playerMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   levelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   levelText: {
     fontSize: 14,
+    fontWeight: '500',
     color: colors.primary,
   },
-  availabilityText: {
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  locationText: {
     fontSize: 14,
-    color: colors.textLight,
+    color: colors.text,
   },
   emptyState: {
     flex: 1,
@@ -589,5 +571,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textLight,
     fontStyle: 'italic',
-  }
+  },
+  floatingActionButton: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
 });

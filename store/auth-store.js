@@ -254,7 +254,7 @@ export const useAuthStore = create(
           
           if (session) {
             // Fetch the user profile data using maybeSingle()
-            const { data: profileData, error: profileError } = await supabase
+            let { data: profileData, error: profileError } = await supabase
               .from(TABLES.PROFILES)
               .select('*')
               .eq('id', session.user.id)
@@ -263,9 +263,16 @@ export const useAuthStore = create(
             if (profileError) throw profileError;
             
             if (!profileData) {
-              console.warn(`Profile not found for active session user ${session.user.id}. User might need onboarding or profile creation.`);
-              // Decide how to handle this - maybe redirect to onboarding?
-              // For now, authenticate but user object might lack profile details.
+              console.warn(`Profile not found for active session user ${session.user.id}. Creating profile for OAuth user.`);
+              
+              // Check if user was authenticated via OAuth
+              const isOAuthUser = session.user.app_metadata?.provider && 
+                                 session.user.app_metadata.provider !== 'email';
+              
+              if (isOAuthUser) {
+                // Create profile for OAuth user
+                profileData = await get().createOrUpdateOAuthProfile(session.user);
+              }
             }
             
             // Combine auth and profile data (profileData might be null)
@@ -392,6 +399,84 @@ export const useAuthStore = create(
           console.error("Failed to record activity via API:", error);
         }
         */
+      },
+      
+      // Google OAuth sign in
+      signInWithGoogle: async () => {
+        set({ isLoading: true, error: null });
+        
+        try {
+          const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: 'sportspalsocialapp://auth/callback'
+            }
+          });
+          
+          if (error) throw error;
+          
+          // The actual auth process will be handled by a deep link callback
+          // This function just initiates the OAuth flow
+          return true;
+        } catch (error) {
+          set({ error: error.message, isLoading: false });
+          return false;
+        }
+      },
+
+      // Create or update profile when signing in with OAuth
+      createOrUpdateOAuthProfile: async (authUser) => {
+        if (!authUser || !authUser.id) return false;
+        
+        try {
+          // Check if profile exists
+          const { data: existingProfile, error: profileError } = await supabase
+            .from(TABLES.PROFILES)
+            .select('*')
+            .eq('id', authUser.id)
+            .maybeSingle();
+            
+          if (profileError) throw profileError;
+          
+          // If profile exists, return it
+          if (existingProfile) return existingProfile;
+          
+          // Create new profile based on OAuth user data
+          const userData = {
+            id: authUser.id,
+            email: authUser.email,
+            name: authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'User',
+            avatar_url: authUser.user_metadata?.avatar_url || 
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'User')}&background=6C5CE7&color=fff`,
+            username: `user${Math.floor(Math.random() * 10000)}`, // Generate random username
+            level: 'beginner',
+            sports: [],
+            is_coach: false
+          };
+          
+          // Insert new profile
+          const { data: newProfile, error: insertError } = await supabase
+            .from(TABLES.PROFILES)
+            .insert({
+              id: userData.id,
+              email: userData.email,
+              name: userData.name,
+              avatar_url: userData.avatar_url,
+              username: userData.username,
+              level: userData.level,
+              sports: userData.sports,
+              is_coach: userData.is_coach
+            })
+            .select()
+            .single();
+            
+          if (insertError) throw insertError;
+          
+          return newProfile;
+        } catch (error) {
+          console.error('Error creating/updating OAuth profile:', error);
+          return false;
+        }
       }
     }),
     {

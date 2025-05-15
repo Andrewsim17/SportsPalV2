@@ -16,11 +16,15 @@ import { Eye, EyeOff, LogIn } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/auth-store';
 
+// Import local images
+const googleLogo = require('../../assets/images/google-logo.png');
+const facebookLogo = require('../../assets/images/facebook-logo.png');
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { login, isLoading, error } = useAuthStore();
+  const { login, signInWithGoogle, isLoading, error } = useAuthStore();
   const router = useRouter();
 
   const handleLogin = async () => {
@@ -35,9 +39,13 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSocialLogin = (provider) => {
-    // Display message that social login is not implemented yet
-    alert(`${provider} login coming soon!`);
+  const handleSocialLogin = async (provider) => {
+    if (provider === 'Google') {
+      await signInWithGoogle();
+    } else {
+      // Display message that social login is not implemented yet
+      alert(`${provider} login coming soon!`);
+    }
   };
 
   return (
@@ -137,17 +145,17 @@ export default function LoginScreen() {
             onPress={() => handleSocialLogin('Facebook')}
           >
             <Image 
-              source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Facebook_Logo_%282019%29.png/1200px-Facebook_Logo_%282019%29.png' }} 
+              source={facebookLogo}
               style={styles.socialIcon} 
             />
           </Pressable>
 
           <Pressable 
-            style={styles.socialButton}
+            style={[styles.socialButton, styles.activeProvider]}
             onPress={() => handleSocialLogin('Google')}
           >
             <Image 
-              source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/1200px-Google_%22G%22_Logo.svg.png' }} 
+              source={googleLogo}
               style={styles.socialIcon} 
             />
           </Pressable>
@@ -163,7 +171,7 @@ export default function LoginScreen() {
         </View>
 
         <Text style={styles.demoText}>
-          Email auth is connected to Supabase. Create an account to get started.
+          Email & Google sign-in are connected to Supabase
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -274,7 +282,8 @@ const styles = StyleSheet.create({
   socialButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 24,
+    gap: 20,
+    marginTop: 24,
     marginBottom: 24,
   },
   socialButton: {
@@ -282,8 +291,8 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     backgroundColor: colors.card,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -293,6 +302,7 @@ const styles = StyleSheet.create({
   socialIcon: {
     width: 30,
     height: 30,
+    resizeMode: 'contain',
   },
   footer: {
     flexDirection: 'row',
@@ -312,5 +322,10 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     marginTop: 24,
     fontSize: 12,
+  },
+  activeProvider: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: colors.primary,
   },
 });
