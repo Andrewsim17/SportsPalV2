@@ -409,16 +409,18 @@ export const useAuthStore = create(
           const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-              redirectTo: 'sportspalsocialapp://auth/callback'
+              redirectTo: 'myapp://auth/callback'
             }
           });
           
           if (error) throw error;
           
+          console.log('Google login initiated successfully');
           // The actual auth process will be handled by a deep link callback
           // This function just initiates the OAuth flow
           return true;
         } catch (error) {
+          console.error('Google sign-in error:', error.message);
           set({ error: error.message, isLoading: false });
           return false;
         }

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, FlatList, ActivityIndicator, Modal } from 'react-native';
-import { MapPin, Search, X, Navigation } from 'lucide-react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, FlatList, ActivityIndicator, Modal, Dimensions } from 'react-native';
+import { MapPin, Search, X, Navigation, Target, Check } from 'lucide-react-native';
 import { colors } from '../constants/colors';
-import LocationMap from './LocationMap';
+import MapboxMap from './MapboxMap';
 
 // Mock locations for demonstration
 const MOCK_LOCATIONS = [
@@ -19,10 +19,21 @@ const MOCK_LOCATIONS = [
   'Putrajaya',
 ];
 
+// Distance options for filtering
+const DISTANCE_OPTIONS = [
+  { label: 'Any distance', value: null },
+  { label: 'Within 5km', value: 5 },
+  { label: '5-10km', value: 10 },
+  { label: '10-20km', value: 20 },
+  { label: '20km+', value: 30 }
+];
+
 export default function LocationInput({ 
   selectedLocation, 
-  onSelectLocation, 
+  onSelectLocation,
   onCoordinatesChange,
+  initialDistance = null,
+  onDistanceChange,
   isModal = false,
   initialCoordinates = null 
 }) {
@@ -30,6 +41,8 @@ export default function LocationInput({
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [selectedCoordinates, setSelectedCoordinates] = useState(initialCoordinates);
   const [customLocationName, setCustomLocationName] = useState('');
+  const [selectedDistance, setSelectedDistance] = useState(initialDistance);
+  const [showDistanceOptions, setShowDistanceOptions] = useState(false);
 
   const filteredLocations = MOCK_LOCATIONS.filter(location => 
     location.toLowerCase().includes(searchQuery.toLowerCase())
@@ -61,6 +74,22 @@ export default function LocationInput({
     }
   };
 
+  const handleDistanceSelect = (distance) => {
+    setSelectedDistance(distance);
+    
+    if (onDistanceChange) {
+      onDistanceChange(distance);
+    }
+    
+    setShowDistanceOptions(false);
+  };
+
+  // Get the selected distance label
+  const getSelectedDistanceLabel = () => {
+    const option = DISTANCE_OPTIONS.find(opt => opt.value === selectedDistance);
+    return option ? option.label : DISTANCE_OPTIONS[0].label;
+  };
+
   // Map picker modal
   const MapPickerModal = () => (
     <Modal
@@ -76,9 +105,9 @@ export default function LocationInput({
           </Pressable>
         </View>
         
-        <LocationMap
+        <MapboxMap
           style={styles.mapPicker}
-          zoomLevel={0.01}
+          zoomLevel={14}
           showUserLocation={true}
           onLocationSelect={handleMapSelection}
           initialRegion={selectedCoordinates}
@@ -105,6 +134,40 @@ export default function LocationInput({
           </Pressable>
         </View>
       </View>
+    </Modal>
+  );
+
+  // Distance options modal
+  const DistanceOptionsModal = () => (
+    <Modal
+      visible={showDistanceOptions}
+      animationType="slide"
+      transparent={true}
+    >
+      <Pressable 
+        style={styles.modalOverlay}
+        onPress={() => setShowDistanceOptions(false)}
+      >
+        <View style={styles.distanceModalContainer}>
+          <Text style={styles.distanceModalTitle}>Select Distance</Text>
+          
+          <FlatList
+            data={DISTANCE_OPTIONS}
+            keyExtractor={(item) => String(item.value || 'any')}
+            renderItem={({ item }) => (
+              <Pressable
+                style={styles.distanceOption}
+                onPress={() => handleDistanceSelect(item.value)}
+              >
+                <Text style={styles.distanceOptionText}>{item.label}</Text>
+                {selectedDistance === item.value && (
+                  <Check size={20} color={colors.primary} />
+                )}
+              </Pressable>
+            )}
+          />
+        </View>
+      </Pressable>
     </Modal>
   );
 
@@ -138,6 +201,20 @@ export default function LocationInput({
           </Text>
         </Pressable>
 
+        {/* Distance filter section */}
+        <Pressable
+          style={styles.distanceFilterButton}
+          onPress={() => setShowDistanceOptions(true)}
+        >
+          <Target size={18} color={colors.primary} />
+          <Text style={styles.distanceFilterText}>
+            {getSelectedDistanceLabel()}
+          </Text>
+          <Text style={styles.distanceFilterHint}>
+            Tap to change
+          </Text>
+        </Pressable>
+
         <FlatList
           data={filteredLocations}
           keyExtractor={(item) => item}
@@ -156,20 +233,35 @@ export default function LocationInput({
         />
 
         <MapPickerModal />
+        <DistanceOptionsModal />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.mapButtonContainer}>
-        <Pressable
-          style={styles.mapButton}
-          onPress={() => setShowMapPicker(true)}
-        >
-          <Navigation size={18} color={colors.primary} />
-          <Text style={styles.mapButtonText}>Select on Map</Text>
-        </Pressable>
+      <View style={styles.inputRow}>
+        <View style={styles.mapButtonContainer}>
+          <Pressable
+            style={styles.mapButton}
+            onPress={() => setShowMapPicker(true)}
+          >
+            <Navigation size={18} color={colors.primary} />
+            <Text style={styles.mapButtonText}>Select on Map</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.distanceContainer}>
+          <Pressable
+            style={styles.distancePicker}
+            onPress={() => setShowDistanceOptions(true)}
+          >
+            <Target size={16} color={colors.primary} />
+            <Text style={styles.distanceText}>
+              {getSelectedDistanceLabel()}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       <FlatList
@@ -200,13 +292,21 @@ export default function LocationInput({
       />
 
       <MapPickerModal />
+      <DistanceOptionsModal />
     </View>
   );
 }
 
+const { width } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: {
     marginVertical: 8,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    paddingHorizontal: 16,
   },
   locationsList: {
     paddingHorizontal: 16,
@@ -250,75 +350,59 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    marginLeft: 8,
-    padding: 4,
+    color: colors.text,
+  },
+  customMapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.card,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  customMapButtonText: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '500',
   },
   locationItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   locationItemText: {
     fontSize: 16,
     color: colors.text,
-    marginLeft: 12,
   },
   emptyText: {
     textAlign: 'center',
-    padding: 16,
     color: colors.textLight,
-  },
-  customMapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  customMapButtonText: {
-    color: colors.primary,
-    marginLeft: 8,
-    fontWeight: '600',
-  },
-  mapButtonContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  mapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 8,
-    width: 'auto',
-    alignSelf: 'flex-start',
-  },
-  mapButtonText: {
-    color: colors.primary,
-    marginLeft: 4,
+    marginTop: 24,
   },
   mapPickerContainer: {
     flex: 1,
     backgroundColor: colors.background,
-    padding: 16,
   },
   mapPickerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   mapPickerTitle: {
     fontSize: 18,
@@ -327,30 +411,124 @@ const styles = StyleSheet.create({
   },
   mapPicker: {
     height: 300,
-    marginBottom: 16,
-    borderRadius: 12,
   },
   customLocationContainer: {
-    marginTop: 16,
+    padding: 16,
+    gap: 16,
   },
   customLocationInput: {
     backgroundColor: colors.card,
-    borderRadius: 8,
     padding: 12,
-    marginBottom: 16,
+    borderRadius: 12,
     fontSize: 16,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   confirmButton: {
     backgroundColor: colors.primary,
-    borderRadius: 8,
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
     alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: colors.border,
   },
   confirmButtonText: {
     color: colors.card,
+    fontSize: 16,
     fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  mapButtonContainer: {
+    flex: 1,
+    marginRight: 8,
+  },
+  mapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.background,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    justifyContent: 'center',
+  },
+  mapButtonText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  distanceContainer: {
+    flex: 1,
+  },
+  distancePicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.background,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    justifyContent: 'center',
+  },
+  distanceText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  distanceModalContainer: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '50%',
+  },
+  distanceModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  distanceOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  distanceOptionText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  distanceFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  distanceFilterText: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
+  },
+  distanceFilterHint: {
+    fontSize: 12,
+    color: colors.textLight,
   },
 });

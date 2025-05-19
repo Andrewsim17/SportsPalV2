@@ -4,6 +4,21 @@ import { Check } from 'lucide-react-native';
 import { colors } from '../constants/colors';
 
 export default function SportDropdown({ sports, selectedSport, onSelectSport, isModal = false }) {
+  // Function to extract emoji and name from formatted string
+  const extractEmoji = (sportString) => {
+    if (!sportString) return { emoji: '', name: '' };
+    
+    // Check if the sport string contains an emoji
+    const hasEmoji = sportString.match(/(\p{Emoji})/u);
+    if (!hasEmoji) return { emoji: '', name: sportString };
+    
+    // Get the first character (emoji) and the rest of the string
+    const emoji = sportString.split(' ')[0];
+    const name = sportString.substring(emoji.length).trim();
+    
+    return { emoji, name };
+  };
+
   if (isModal) {
     return (
       <View style={styles.modalContainer}>
@@ -11,17 +26,24 @@ export default function SportDropdown({ sports, selectedSport, onSelectSport, is
         <FlatList
           data={sports}
           keyExtractor={(item) => item}
-          renderItem={({ item }) => (
-            <Pressable
-              style={styles.sportItem}
-              onPress={() => onSelectSport(item)}
-            >
-              <Text style={styles.sportItemText}>{item}</Text>
-              {selectedSport === item && (
-                <Check size={20} color={colors.primary} />
-              )}
-            </Pressable>
-          )}
+          renderItem={({ item }) => {
+            const { emoji, name } = extractEmoji(item);
+            
+            return (
+              <Pressable
+                style={styles.sportItem}
+                onPress={() => onSelectSport(item)}
+              >
+                <View style={styles.sportItemContent}>
+                  {emoji && <Text style={styles.sportEmoji}>{emoji}</Text>}
+                  <Text style={styles.sportItemText}>{name || item}</Text>
+                </View>
+                {selectedSport === item && (
+                  <Check size={20} color={colors.primary} />
+                )}
+              </Pressable>
+            );
+          }}
         />
       </View>
     );
@@ -34,24 +56,42 @@ export default function SportDropdown({ sports, selectedSport, onSelectSport, is
         showsHorizontalScrollIndicator={false}
         data={sports}
         keyExtractor={(item) => item}
-        renderItem={({ item }) => (
-          <Pressable
-            style={[
-              styles.sportButton,
-              selectedSport === item && styles.selectedSportButton
-            ]}
-            onPress={() => onSelectSport(item)}
-          >
-            <Text
+        renderItem={({ item }) => {
+          const { emoji, name } = extractEmoji(item);
+          
+          return (
+            <Pressable
               style={[
-                styles.sportButtonText,
-                selectedSport === item && styles.selectedSportButtonText
+                styles.sportButton,
+                selectedSport === item && styles.selectedSportButton
               ]}
+              onPress={() => onSelectSport(item)}
             >
-              {item}
-            </Text>
-          </Pressable>
-        )}
+              {emoji ? (
+                <View style={styles.sportButtonContent}>
+                  <Text style={styles.sportEmoji}>{emoji}</Text>
+                  <Text
+                    style={[
+                      styles.sportButtonText,
+                      selectedSport === item && styles.selectedSportButtonText
+                    ]}
+                  >
+                    {name}
+                  </Text>
+                </View>
+              ) : (
+                <Text
+                  style={[
+                    styles.sportButtonText,
+                    selectedSport === item && styles.selectedSportButtonText
+                  ]}
+                >
+                  {item}
+                </Text>
+              )}
+            </Pressable>
+          );
+        }}
         contentContainerStyle={styles.sportsList}
       />
     </View>
@@ -83,6 +123,14 @@ const styles = StyleSheet.create({
   selectedSportButtonText: {
     color: colors.card,
   },
+  sportButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sportEmoji: {
+    fontSize: 16,
+  },
   modalContainer: {
     width: '100%',
   },
@@ -101,6 +149,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  sportItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   sportItemText: {
     fontSize: 16,

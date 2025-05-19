@@ -18,6 +18,65 @@ export default function FilterBar({
   const [showSportModal, setShowSportModal] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [selectedDistance, setSelectedDistance] = useState(null);
+
+  // Helper function to get the location display text
+  const getLocationDisplay = () => {
+    if (!selectedLocation && !selectedDistance) return 'Location';
+    
+    let display = selectedLocation || 'Any location';
+    
+    // Add distance if selected
+    if (selectedDistance) {
+      const distanceText = selectedDistance <= 5 
+        ? 'within 5km'
+        : selectedDistance <= 10
+          ? '5-10km'
+          : selectedDistance <= 20
+            ? '10-20km'
+            : '20km+';
+      display += ` (${distanceText})`;
+    }
+    
+    return display;
+  };
+
+  // Handle location and distance change
+  const handleLocationChange = (location, distance) => {
+    onSelectLocation(location);
+    setSelectedDistance(distance);
+    
+    // Update active filters to include distance
+    const updatedFilters = { ...activeFilters };
+    if (distance) {
+      updatedFilters.distance = distance;
+    } else {
+      // Remove distance filter if no distance is selected
+      if (updatedFilters.distance) {
+        delete updatedFilters.distance;
+      }
+    }
+    
+    onApplyFilters(updatedFilters);
+  };
+
+  // Handler for when only distance changes
+  const handleDistanceChange = (distance) => {
+    setSelectedDistance(distance);
+    
+    // Update active filters to include distance
+    const updatedFilters = { ...activeFilters };
+    if (distance) {
+      updatedFilters.distance = distance;
+    } else {
+      // Remove distance filter if no distance is selected
+      if (updatedFilters.distance) {
+        delete updatedFilters.distance;
+      }
+    }
+    
+    onApplyFilters(updatedFilters);
+  };
 
   return (
     <View style={styles.container}>
@@ -39,7 +98,7 @@ export default function FilterBar({
       >
         <MapPin size={16} color={colors.primary} />
         <Text style={styles.filterText} numberOfLines={1}>
-          {selectedLocation || 'Location'}
+          {getLocationDisplay()}
         </Text>
       </Pressable>
 
@@ -94,10 +153,12 @@ export default function FilterBar({
               <View style={styles.modalContent}>
                 <LocationInput
                   selectedLocation={selectedLocation}
+                  initialDistance={selectedDistance}
                   onSelectLocation={(location) => {
-                    onSelectLocation(location);
+                    handleLocationChange(location, selectedDistance);
                     setShowLocationModal(false);
                   }}
+                  onDistanceChange={handleDistanceChange}
                   isModal={true}
                 />
               </View>
@@ -111,6 +172,10 @@ export default function FilterBar({
         visible={showFilterModal}
         onClose={() => setShowFilterModal(false)}
         onApply={(filters) => {
+          // Preserve distance filter when applying other filters
+          if (selectedDistance) {
+            filters.distance = selectedDistance;
+          }
           onApplyFilters(filters);
           setShowFilterModal(false);
         }}

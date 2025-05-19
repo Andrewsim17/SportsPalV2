@@ -13,31 +13,38 @@ export default function AuthCallback() {
   useEffect(() => {
     // Handle the URL parameters from the OAuth callback
     async function handleOAuthCallback() {
+      console.log('Auth callback received with params:', params);
+      
       try {
+        console.log('Getting session from supabase...');
         // Check if we have the session from the URL
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          console.error('Error getting session:', error);
+          console.error('Error getting session:', error.message, error);
           router.replace('/auth/login');
           return;
         }
         
         if (session) {
+          console.log('Session found, user ID:', session.user.id);
           // Create or update profile for OAuth user
-          await createOrUpdateOAuthProfile(session.user);
+          const profileResult = await createOrUpdateOAuthProfile(session.user);
+          console.log('Profile creation/update result:', profileResult ? 'success' : 'failed');
           
           // Fetch the user profile data
           await refreshProfile();
+          console.log('Profile refreshed, navigating to main app');
           
           // Navigate to the main app
           router.replace('/(tabs)');
         } else {
+          console.warn('No session found in callback');
           // No session, go back to login
           router.replace('/auth/login');
         }
       } catch (error) {
-        console.error('OAuth callback error:', error);
+        console.error('OAuth callback error:', error.message, error);
         router.replace('/auth/login');
       }
     }

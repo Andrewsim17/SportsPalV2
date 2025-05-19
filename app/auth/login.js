@@ -41,7 +41,17 @@ export default function LoginScreen() {
 
   const handleSocialLogin = async (provider) => {
     if (provider === 'Google') {
-      await signInWithGoogle();
+      try {
+        console.log('Starting Google login...');
+        const success = await signInWithGoogle();
+        console.log('Google login flow initiated:', success ? 'success' : 'failed');
+        
+        // Note: We don't navigate here because the callback will handle that
+        // The user should see the "loading" indicator while redirecting
+      } catch (error) {
+        console.error('Error initiating Google login:', error);
+        alert(`Failed to login with Google: ${error.message}`);
+      }
     } else {
       // Display message that social login is not implemented yet
       alert(`${provider} login coming soon!`);

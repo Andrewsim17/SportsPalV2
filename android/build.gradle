@@ -48,8 +48,7 @@ allprojects {
       authentication { basic(BasicAuthentication) }
       credentials {
         username = 'mapbox'
-        // Make sure to use a proper Mapbox secret token with DOWNLOADS:READ and DOWNLOADS:WRITE permissions
-        password = "sk.eyJ1IjoiYW5kcmV3c2ltMTciLCJhIjoiY21hbTRkbzdjMGU5YjJpc2ZiM2ZnMnlyeiJ9.e2CQOA7YLizwCVuOCpeKHQ"
+        password = project.properties['MAPBOX_DOWNLOADS_TOKEN'] ?: ""
       }
     }
   }

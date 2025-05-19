@@ -8,8 +8,86 @@ import SearchBar from '../../components/SearchBar';
 import FilterBar from '../../components/FilterBar';
 import { venuesApi } from '../../lib/api';
 import { processVenueImages } from '../../lib/storage';
+import { SportTypes } from '../../types/activity'; // Import sports from activity.js
 
-const SPORTS = ['All', 'Tennis', 'Basketball', 'Football', 'Badminton', 'Swimming', 'Soccer'];
+// Add emojis to each sport
+const SPORTS_WITH_EMOJIS = [
+  { name: 'All', emoji: '🏆' },
+  { name: 'Basketball', emoji: '🏀' },
+  { name: 'Tennis', emoji: '🎾' },
+  { name: 'Soccer', emoji: '⚽' },
+  { name: 'Volleyball', emoji: '🏐' },
+  { name: 'Badminton', emoji: '🏸' },
+  { name: 'Running', emoji: '🏃' },
+  { name: 'Cycling', emoji: '🚴' },
+  { name: 'Swimming', emoji: '🏊' },
+  { name: 'Hiking', emoji: '🥾' },
+  { name: 'Golf', emoji: '⛳' },
+  { name: 'Table Tennis', emoji: '🏓' },
+  { name: 'Cricket', emoji: '🏏' },
+  { name: 'Rugby', emoji: '🏉' },
+  { name: 'Baseball', emoji: '⚾' },
+  { name: 'Yoga', emoji: '🧘' },
+  { name: 'Boxing', emoji: '🥊' },
+  { name: 'Martial Arts', emoji: '🥋' },
+  { name: 'Skiing', emoji: '⛷️' },
+  { name: 'Snowboarding', emoji: '🏂' },
+  { name: 'Surfing', emoji: '🏄' },
+  { name: 'Rock Climbing', emoji: '🧗' },
+  { name: 'Weight Training', emoji: '🏋️' },
+  { name: 'CrossFit', emoji: '💪' },
+  { name: 'Pilates', emoji: '🤸' },
+  { name: 'Dance', emoji: '💃' },
+  { name: 'Skateboarding', emoji: '🛹' },
+  { name: 'Rowing', emoji: '🚣' },
+  { name: 'Kayaking', emoji: '🛶' },
+  { name: 'Archery', emoji: '🏹' },
+  { name: 'Fencing', emoji: '🤺' },
+  { name: 'Hockey', emoji: '🏑' },
+  { name: 'Ice Hockey', emoji: '🏒' },
+  { name: 'Handball', emoji: '🤾' },
+  { name: 'Squash', emoji: '🥎' },
+  { name: 'Triathlon', emoji: '🏊‍♂️' },
+  { name: 'Ultimate Frisbee', emoji: '🥏' },
+  { name: 'Parkour', emoji: '🏃‍♂️' },
+  { name: 'Zumba', emoji: '💃' },
+  { name: 'Walking', emoji: '🚶' },
+  { name: 'Sailing', emoji: '⛵' },
+  { name: 'Bowling', emoji: '🎳' },
+  { name: 'Climbing', emoji: '🧗‍♀️' },
+  { name: 'Gymnastics', emoji: '🤸‍♀️' },
+  { name: 'Judo', emoji: '🥋' },
+  { name: 'Karate', emoji: '🥋' },
+  { name: 'Kickboxing', emoji: '🥊' },
+  { name: 'Lacrosse', emoji: '🥍' },
+  { name: 'Marathon', emoji: '🏃‍♀️' },
+  { name: 'MMA', emoji: '🥋' },
+  { name: 'Muay Thai', emoji: '🥊' },
+  { name: 'Paddle Boarding', emoji: '🏄‍♂️' },
+  { name: 'Pole Dancing', emoji: '💃' },
+  { name: 'Racquetball', emoji: '🎾' },
+  { name: 'Roller Skating', emoji: '🛼' },
+  { name: 'Scuba Diving', emoji: '🤿' },
+  { name: 'Snorkeling', emoji: '🤿' },
+  { name: 'Softball', emoji: '🥎' },
+  { name: 'Taekwondo', emoji: '🥋' },
+  { name: 'Tai Chi', emoji: '🧘‍♂️' },
+  { name: 'Water Polo', emoji: '🤽' }
+];
+
+// Format the emojis for display (emoji + name)
+const FORMATTED_SPORTS = SPORTS_WITH_EMOJIS.map(sport => `${sport.emoji} ${sport.name}`);
+
+// Function to extract the sport name without emoji
+const extractSportName = (sportWithEmoji) => {
+  if (!sportWithEmoji) return null;
+  // Check if there's an emoji
+  if (sportWithEmoji.match(/(\p{Emoji})/u)) {
+    // Get everything after the first space
+    return sportWithEmoji.split(' ').slice(1).join(' ');
+  }
+  return sportWithEmoji;
+};
 
 export default function VenuesScreen() {
   const [venues, setVenues] = useState([]);
@@ -25,21 +103,29 @@ export default function VenuesScreen() {
   const fetchVenues = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    console.log('Fetching venues with filters:', { sport: selectedSport, location: selectedLocation, query: searchQuery });
+    
+    // Extract the sport name without emoji for filtering
+    const sportName = selectedSport === '🏆 All' ? null : extractSportName(selectedSport);
+    
+    const filters = {
+      ...activeFilters,
+      sport: sportName,
+      location: selectedLocation || null, // Use the selected location
+      distance: activeFilters.distance || null, // Include distance filter if it exists
+      search: searchQuery || null, // Use search query for text search
+    };
+    
+    // Remove null/undefined filters
+    Object.keys(filters).forEach(key => {
+      if (filters[key] === null || filters[key] === undefined || filters[key] === '') {
+        delete filters[key];
+      }
+    });
+    
+    console.log("Fetching venues with filters:", filters);
     
     try {
-      const apiFilters = {};
-      if (selectedSport !== 'All') {
-        apiFilters.sport = selectedSport;
-      }
-      if (selectedLocation) {
-        apiFilters.city = selectedLocation;
-      }
-      if (searchQuery) {
-        apiFilters.name = searchQuery;
-      }
-      
-      const fetchedVenues = await venuesApi.getVenues(apiFilters);
+      const fetchedVenues = await venuesApi.getVenues(filters);
       console.log('Fetched venues:', fetchedVenues.length);
       
       // Process images for each venue
@@ -67,7 +153,7 @@ export default function VenuesScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedSport, selectedLocation, searchQuery]);
+  }, [selectedSport, selectedLocation, searchQuery, activeFilters]);
 
   useEffect(() => {
     fetchVenues();
@@ -122,7 +208,7 @@ export default function VenuesScreen() {
       )}
 
       <FilterBar 
-        sports={SPORTS}
+        sports={FORMATTED_SPORTS}
         selectedSport={selectedSport}
         onSelectSport={setSelectedSport}
         selectedLocation={selectedLocation}

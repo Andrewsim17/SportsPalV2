@@ -9,7 +9,7 @@ import {
   TouchableWithoutFeedback,
   Platform
 } from 'react-native';
-import { X, Check, Filter, DollarSign, MapPin, Award } from 'lucide-react-native';
+import { X, Check, Filter, DollarSign, Award } from 'lucide-react-native';
 import { colors } from '../constants/colors';
 
 export default function FilterModal({ 
@@ -21,10 +21,8 @@ export default function FilterModal({
 }) {
   const [priceRange, setPriceRange] = useState(initialFilters.priceRange || [0, 100]);
   const [selectedLevels, setSelectedLevels] = useState(initialFilters.levels || []);
-  const [selectedLocations, setSelectedLocations] = useState(initialFilters.locations || []);
   
   const LEVELS = ['Beginner Friendly', 'Intermediate', 'Advanced'];
-  const LOCATIONS = ['Within 5km', '5-10km', '10-20km', '20km+'];
   
   const toggleLevel = (level) => {
     if (selectedLevels.includes(level)) {
@@ -34,19 +32,10 @@ export default function FilterModal({
     }
   };
   
-  const toggleLocation = (location) => {
-    if (selectedLocations.includes(location)) {
-      setSelectedLocations(selectedLocations.filter(l => l !== location));
-    } else {
-      setSelectedLocations([...selectedLocations, location]);
-    }
-  };
-  
   const handleApply = () => {
     onApply({
       priceRange,
-      levels: selectedLevels,
-      locations: selectedLocations
+      levels: selectedLevels
     });
     onClose();
   };
@@ -54,7 +43,6 @@ export default function FilterModal({
   const handleReset = () => {
     setPriceRange([0, 100]);
     setSelectedLevels([]);
-    setSelectedLocations([]);
   };
 
   const handlePriceChange = (value) => {
@@ -156,36 +144,6 @@ export default function FilterModal({
                           selectedLevels.includes(level) && styles.optionTextSelected
                         ]}>
                           {level}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-                
-                <View style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <MapPin size={20} color={colors.primary} />
-                    <Text style={styles.sectionTitle}>Location</Text>
-                  </View>
-                  
-                  <View style={styles.optionsContainer}>
-                    {LOCATIONS.map((location) => (
-                      <Pressable
-                        key={location}
-                        style={[
-                          styles.optionButton,
-                          selectedLocations.includes(location) && styles.optionButtonSelected
-                        ]}
-                        onPress={() => toggleLocation(location)}
-                      >
-                        {selectedLocations.includes(location) && (
-                          <Check size={16} color={colors.card} style={styles.checkIcon} />
-                        )}
-                        <Text style={[
-                          styles.optionText,
-                          selectedLocations.includes(location) && styles.optionTextSelected
-                        ]}>
-                          {location}
                         </Text>
                       </Pressable>
                     ))}

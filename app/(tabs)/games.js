@@ -9,8 +9,86 @@ import SearchBar from '../../components/SearchBar';
 import FilterBar from '../../components/FilterBar';
 import { gamesApi } from '../../lib/api'; // Import the games API
 import { useAuthStore } from '../../store/auth-store'; // Import auth store if needed for joining games
+import { SportTypes } from '../../types/activity'; // Import sports from activity.js
 
-const SPORTS = ['All', 'Basketball', 'Tennis', 'Football', 'Volleyball', 'Badminton'];
+// Add emojis to each sport
+const SPORTS_WITH_EMOJIS = [
+  { name: 'All', emoji: '🏆' },
+  { name: 'Basketball', emoji: '🏀' },
+  { name: 'Tennis', emoji: '🎾' },
+  { name: 'Soccer', emoji: '⚽' },
+  { name: 'Volleyball', emoji: '🏐' },
+  { name: 'Badminton', emoji: '🏸' },
+  { name: 'Running', emoji: '🏃' },
+  { name: 'Cycling', emoji: '🚴' },
+  { name: 'Swimming', emoji: '🏊' },
+  { name: 'Hiking', emoji: '🥾' },
+  { name: 'Golf', emoji: '⛳' },
+  { name: 'Table Tennis', emoji: '🏓' },
+  { name: 'Cricket', emoji: '🏏' },
+  { name: 'Rugby', emoji: '🏉' },
+  { name: 'Baseball', emoji: '⚾' },
+  { name: 'Yoga', emoji: '🧘' },
+  { name: 'Boxing', emoji: '🥊' },
+  { name: 'Martial Arts', emoji: '🥋' },
+  { name: 'Skiing', emoji: '⛷️' },
+  { name: 'Snowboarding', emoji: '🏂' },
+  { name: 'Surfing', emoji: '🏄' },
+  { name: 'Rock Climbing', emoji: '🧗' },
+  { name: 'Weight Training', emoji: '🏋️' },
+  { name: 'CrossFit', emoji: '💪' },
+  { name: 'Pilates', emoji: '🤸' },
+  { name: 'Dance', emoji: '💃' },
+  { name: 'Skateboarding', emoji: '🛹' },
+  { name: 'Rowing', emoji: '🚣' },
+  { name: 'Kayaking', emoji: '🛶' },
+  { name: 'Archery', emoji: '🏹' },
+  { name: 'Fencing', emoji: '🤺' },
+  { name: 'Hockey', emoji: '🏑' },
+  { name: 'Ice Hockey', emoji: '🏒' },
+  { name: 'Handball', emoji: '🤾' },
+  { name: 'Squash', emoji: '🥎' },
+  { name: 'Triathlon', emoji: '🏊‍♂️' },
+  { name: 'Ultimate Frisbee', emoji: '🥏' },
+  { name: 'Parkour', emoji: '🏃‍♂️' },
+  { name: 'Zumba', emoji: '💃' },
+  { name: 'Walking', emoji: '🚶' },
+  { name: 'Sailing', emoji: '⛵' },
+  { name: 'Bowling', emoji: '🎳' },
+  { name: 'Climbing', emoji: '🧗‍♀️' },
+  { name: 'Gymnastics', emoji: '🤸‍♀️' },
+  { name: 'Judo', emoji: '🥋' },
+  { name: 'Karate', emoji: '🥋' },
+  { name: 'Kickboxing', emoji: '🥊' },
+  { name: 'Lacrosse', emoji: '🥍' },
+  { name: 'Marathon', emoji: '🏃‍♀️' },
+  { name: 'MMA', emoji: '🥋' },
+  { name: 'Muay Thai', emoji: '🥊' },
+  { name: 'Paddle Boarding', emoji: '🏄‍♂️' },
+  { name: 'Pole Dancing', emoji: '💃' },
+  { name: 'Racquetball', emoji: '🎾' },
+  { name: 'Roller Skating', emoji: '🛼' },
+  { name: 'Scuba Diving', emoji: '🤿' },
+  { name: 'Snorkeling', emoji: '🤿' },
+  { name: 'Softball', emoji: '🥎' },
+  { name: 'Taekwondo', emoji: '🥋' },
+  { name: 'Tai Chi', emoji: '🧘‍♂️' },
+  { name: 'Water Polo', emoji: '🤽' }
+];
+
+// Format the emojis for display (emoji + name)
+const FORMATTED_SPORTS = SPORTS_WITH_EMOJIS.map(sport => `${sport.emoji} ${sport.name}`);
+
+// Function to extract the sport name without emoji
+const extractSportName = (sportWithEmoji) => {
+  if (!sportWithEmoji) return null;
+  // Check if there's an emoji
+  if (sportWithEmoji.match(/(\p{Emoji})/u)) {
+    // Get everything after the first space
+    return sportWithEmoji.split(' ').slice(1).join(' ');
+  }
+  return sportWithEmoji;
+};
 
 export default function GamesScreen() {
   const [games, setGames] = useState([]);
@@ -30,11 +108,15 @@ export default function GamesScreen() {
     setIsLoading(true);
     setError(null);
     
+    // Extract the sport name without emoji for filtering
+    const sportName = selectedSport === '🏆 All' ? null : extractSportName(selectedSport);
+    
     const filters = {
       ...activeFilters, // Include price, level etc. from FilterBar
-      sport: selectedSport === 'All' ? null : selectedSport,
-      location: searchQuery || null, // Use search query for location filter for now
-      // We could add more specific filters here (e.g., date)
+      sport: sportName,
+      location: selectedLocation || null, // Use the selected location
+      distance: activeFilters.distance || null, // Include distance filter if it exists
+      search: searchQuery || null, // Use search query for text search
     };
     
     // Remove null/undefined filters
@@ -43,6 +125,8 @@ export default function GamesScreen() {
         delete filters[key];
       }
     });
+
+    console.log("Fetching games with filters:", filters);
 
     try {
       const fetchedGames = await gamesApi.getGames(filters);
@@ -84,7 +168,7 @@ export default function GamesScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedSport, searchQuery, activeFilters]);
+  }, [selectedSport, selectedLocation, searchQuery, activeFilters]);
 
   // Initial fetch and fetch on filter changes
   useEffect(() => {
@@ -300,7 +384,7 @@ export default function GamesScreen() {
       )}
 
       <FilterBar
-        sports={SPORTS}
+        sports={FORMATTED_SPORTS}
         selectedSport={selectedSport}
         onSelectSport={setSelectedSport}
         selectedLocation={selectedLocation}
@@ -312,14 +396,7 @@ export default function GamesScreen() {
       {renderContent()}
 
       <Pressable style={styles.createGameButton} onPress={handleCreateGame}>
-        <LinearGradient
-          colors={[colors.primary, colors.primaryLight]}
-          style={styles.createGameButtonGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Plus size={24} color={colors.card} />
-        </LinearGradient>
+        <Plus size={24} color={colors.card} />
       </Pressable>
     </View>
   );
@@ -376,16 +453,13 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    overflow: 'hidden', // Important for gradient border radius
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 8,
-  },
-  createGameButtonGradient: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

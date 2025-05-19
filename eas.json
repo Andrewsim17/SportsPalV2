@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 3.13.3"
+    "version": ">= 3.13.3",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -8,8 +9,65 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
     },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      }
+    },
+    "simple-apk": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "withoutCredentials": false
+      },
+      "env": {
+        "EXPO_NO_DOTENV": "1"
+      }
+    },
+    "custom": {
+      "extends": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "prebuildCommand": "bash eas-build-pre-install.sh",
+      "env": {
+        "EXPO_USE_COMMUNITY_AUTOLINKING": "1"
+      }
+    },
+    "dev-client": {
+      "android": {
+        "buildType": "apk"
+      },
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "dev-client"
+    },
+    "mapbox-apk": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "MAPBOX_DOWNLOADS_TOKEN": "pk.eyJ1IjoiYW5kcmV3c2ltMTciLCJhIjoiY203enY5MXRqMG8yNjJucTE5MnZsd2Q0cCJ9.c4sXLHAOM2_qQm2b1sQr6A"
+      }
+    },
+    "no-mapbox": {
+      "android": {
+        "buildType": "apk"
+      },
+      "prebuildCommand": "node scripts/disable-mapbox.js",
+      "channel": "no-mapbox"
+    }
+  },
+  "submit": {
     "production": {}
   }
 } 

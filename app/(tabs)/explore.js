@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Search, Filter, MapPin, Award, Star, AlertCircle, Plus, UserPlus, UserCheck } from 'lucide-react-native';
+import { Search, MapPin, Award, Star, AlertCircle, Plus, UserPlus, UserCheck } from 'lucide-react-native';
 import { colors } from '../../constants/colors';
 import { communitiesApi, profilesApi, gamesApi } from '../../lib/api';
 import { useAuthStore } from '../../store/auth-store';
@@ -282,9 +282,6 @@ export default function ExploreScreen() {
           onChangeText={setSearchQuery}
           placeholderTextColor={colors.textLight}
         />
-        <Pressable style={styles.filterButton}>
-          <Filter size={20} color={colors.primary} />
-        </Pressable>
       </View>
 
       <View style={styles.categoriesContainer}>
@@ -345,9 +342,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 16,
     color: colors.text,
-  },
-  filterButton: {
-    padding: 4,
   },
   categoriesContainer: {
     marginBottom: 16,

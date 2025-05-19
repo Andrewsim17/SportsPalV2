@@ -54,8 +54,9 @@
     "experiments": {
       "typedRoutes": true
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "enabled": false
     },
     "extra": {
       "router": {
@@ -65,6 +66,9 @@
         "projectId": "c0a1500b-6e8d-42c1-bbd7-bd09113355bc"
       }
     },
-    "owner": "andrewsim"
+    "owner": "andrewsim",
+    "developmentClient": {
+      "silentLaunch": true
+    }
   }
 }
